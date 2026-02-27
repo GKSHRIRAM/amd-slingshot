@@ -42,3 +42,6 @@ appsettings.Development.json
 # OS
 Thumbs.db
 .DS_Store
+
+# Fritzing parts repo (cloned locally, SVGs already extracted)
+fritzing-parts/
