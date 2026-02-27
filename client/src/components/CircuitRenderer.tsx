@@ -11,7 +11,7 @@ import {
     getComponentMeta,
     getWireColor,
 } from "@/lib/fritzing";
-import { RoutingGrid, findPath, applyWireOffset, type Point } from "@/lib/wireRouter";
+import { RoutingGrid, findPath, type Point } from "@/lib/wireRouter";
 
 interface CircuitRendererProps {
     pinMapping: Record<string, string>;
@@ -415,32 +415,49 @@ function drawManhattanWire(
     fromX: number, fromY: number,
     toX: number, toY: number,
     color: string, thickness: number,
-    offsetIndex: number = 0
+    wireIndex: number = 0
 ) {
+    // Stagger the START point slightly per wire index to prevent wires from
+    // sharing the exact same path through the A* grid.
+    // Offset perpendicular to the general from→to direction.
+    const stagger = (wireIndex % 6) * 10 - 25; // range: -25 to +25
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const isMoreHorizontal = Math.abs(dx) > Math.abs(dy);
+
+    // Apply stagger perpendicular to the dominant direction
+    const staggeredFromX = isMoreHorizontal ? fromX : fromX + stagger;
+    const staggeredFromY = isMoreHorizontal ? fromY + stagger : fromY;
+
     // Find path using A*
-    let path = findPath(grid, fromX, fromY, toX, toY);
-
-    // Apply separation offset for parallel wires
-    if (offsetIndex > 0) {
-        path = applyWireOffset(path, offsetIndex);
-    }
-
+    const path = findPath(grid, staggeredFromX, staggeredFromY, toX, toY);
     if (path.length < 2) return;
 
-    // Subtle glow
-    ctx.strokeStyle = color + "30";
+    // Snap start back to exact pin position
+    path[0] = { x: fromX, y: fromY };
+
+    // ═══ PASS 1: DARK HALO (creates over/under crossing illusion) ═══
+    ctx.strokeStyle = "#0d0d20"; // Match canvas dark bg
+    ctx.lineWidth = thickness + 8;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    drawPathWithCorners(ctx, path, 6);
+    ctx.stroke();
+
+    // ═══ PASS 2: SUBTLE GLOW ═══
+    ctx.strokeStyle = color + "25";
     ctx.lineWidth = thickness + 4;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    drawPathWithCorners(ctx, path, 5);
+    drawPathWithCorners(ctx, path, 6);
     ctx.stroke();
 
-    // Core wire
+    // ═══ PASS 3: CRISP CORE WIRE ═══
     ctx.strokeStyle = color;
     ctx.lineWidth = thickness;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    drawPathWithCorners(ctx, path, 5);
+    drawPathWithCorners(ctx, path, 6);
     ctx.stroke();
 }
 
