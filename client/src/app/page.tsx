@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import CircuitRenderer from "@/components/CircuitRenderer";
 import { generateCircuit } from "@/lib/api";
 import type { GenerateCircuitResponse } from "@/types/circuit";
@@ -12,6 +12,16 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"circuit" | "code" | "mapping">(
     "circuit"
   );
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleExportPNG = () => {
+    if (!canvasRef.current) return;
+    const dataURL = canvasRef.current.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = `circuit-${Date.now()}.png`;
+    link.href = dataURL;
+    link.click();
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -202,7 +212,15 @@ export default function Home() {
               {/* Circuit Tab */}
               {activeTab === "circuit" && result.pinMapping && (
                 <div className="p-4">
-                  <CircuitRenderer pinMapping={result.pinMapping} needsBreadboard={result.needsBreadboard} />
+                  <div className="flex justify-end mb-3">
+                    <button
+                      onClick={handleExportPNG}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors text-sm font-medium"
+                    >
+                      📥 Export as PNG
+                    </button>
+                  </div>
+                  <CircuitRenderer ref={canvasRef} pinMapping={result.pinMapping} needsBreadboard={result.needsBreadboard} />
                 </div>
               )}
 

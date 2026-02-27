@@ -5,21 +5,21 @@ import { ComponentVisual, PinCoordinate } from "@/types/circuit";
 // These map physical pin positions to (x, y) canvas coordinates
 // ═══════════════════════════════════════════════════════════════
 
-const BOARD_X = 60;
-const BOARD_Y = 80;
-const BOARD_WIDTH = 380;
-const BOARD_HEIGHT = 260;
+const BOARD_X = 80;
+const BOARD_Y = 100;
+const BOARD_WIDTH = 600;
+const BOARD_HEIGHT = 410;
 
-const PIN_SPACING = 24;
-const TOP_ROW_Y = BOARD_Y - 8;
-const BOTTOM_ROW_Y = BOARD_Y + BOARD_HEIGHT + 8;
+const PIN_SPACING = 38;
+const TOP_ROW_Y = BOARD_Y - 12;
+const BOTTOM_ROW_Y = BOARD_Y + BOARD_HEIGHT + 12;
 
 export const ARDUINO_UNO_PINS: Record<string, PinCoordinate> = {};
 
 // Digital pins D0-D13 (top row, right to left)
 for (let i = 0; i <= 13; i++) {
     ARDUINO_UNO_PINS[`D${i}`] = {
-        x: BOARD_X + BOARD_WIDTH - 20 - i * PIN_SPACING,
+        x: BOARD_X + BOARD_WIDTH - 30 - i * PIN_SPACING,
         y: TOP_ROW_Y,
         label: `D${i}`,
         side: "top",
@@ -29,7 +29,7 @@ for (let i = 0; i <= 13; i++) {
 // Analog pins A0-A5 (bottom row, right to left)
 for (let i = 0; i <= 5; i++) {
     ARDUINO_UNO_PINS[`A${i}`] = {
-        x: BOARD_X + BOARD_WIDTH - 20 - i * PIN_SPACING,
+        x: BOARD_X + BOARD_WIDTH - 30 - i * PIN_SPACING,
         y: BOTTOM_ROW_Y,
         label: `A${i}`,
         side: "bottom",
@@ -38,19 +38,19 @@ for (let i = 0; i <= 5; i++) {
 
 // Power pins
 ARDUINO_UNO_PINS["5V"] = {
-    x: BOARD_X + 40,
+    x: BOARD_X + 60,
     y: BOTTOM_ROW_Y,
     label: "5V",
     side: "bottom",
 };
 ARDUINO_UNO_PINS["3V3"] = {
-    x: BOARD_X + 18,
+    x: BOARD_X + 28,
     y: BOTTOM_ROW_Y,
     label: "3V3",
     side: "bottom",
 };
 ARDUINO_UNO_PINS["GND"] = {
-    x: BOARD_X + 62,
+    x: BOARD_X + 92,
     y: BOTTOM_ROW_Y,
     label: "GND",
     side: "bottom",
@@ -75,7 +75,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#FF6B35",
         gradient: ["#FF8855", "#CC4411"],
         icon: "📡",
-        width: 80, height: 55,
+        width: 150, height: 100,
         displayName: "IR Sensor",
         category: "sensor",
     },
@@ -83,7 +83,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#4ECDC4",
         gradient: ["#5FE0D7", "#2BA89F"],
         icon: "📏",
-        width: 100, height: 55,
+        width: 170, height: 100,
         displayName: "HC-SR04",
         category: "sensor",
     },
@@ -91,7 +91,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#E63946",
         gradient: ["#FF4D5A", "#B8202D"],
         icon: "⚙️",
-        width: 110, height: 70,
+        width: 190, height: 130,
         displayName: "L298N Driver",
         category: "driver",
     },
@@ -99,7 +99,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#457B9D",
         gradient: ["#5A8FAF", "#2D5F7D"],
         icon: "🔄",
-        width: 70, height: 55,
+        width: 140, height: 110,
         displayName: "DC Motor",
         category: "actuator",
     },
@@ -107,7 +107,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#2A9D8F",
         gradient: ["#35B8A8", "#1E7A6F"],
         icon: "🦾",
-        width: 80, height: 55,
+        width: 150, height: 100,
         displayName: "SG90 Servo",
         category: "actuator",
     },
@@ -115,7 +115,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#E76F51",
         gradient: ["#FF8866", "#CC4433"],
         icon: "💡",
-        width: 50, height: 45,
+        width: 100, height: 90,
         displayName: "Red LED",
         category: "indicator",
     },
@@ -123,7 +123,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#8B5E3C",
         gradient: ["#A77450", "#6B4226"],
         icon: "🎛️",
-        width: 70, height: 55,
+        width: 140, height: 100,
         displayName: "Potentiometer",
         category: "input",
     },
@@ -131,7 +131,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#6A5ACD",
         gradient: ["#7B6BE0", "#5445AA"],
         icon: "🌡️",
-        width: 80, height: 55,
+        width: 150, height: 100,
         displayName: "BME280",
         category: "sensor",
     },
@@ -139,7 +139,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#1C1C2E",
         gradient: ["#2A2A44", "#0E0E1A"],
         icon: "🖥️",
-        width: 90, height: 60,
+        width: 160, height: 110,
         displayName: "OLED Display",
         category: "display",
     },
@@ -147,7 +147,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#DAA520",
         gradient: ["#F0C040", "#B8880A"],
         icon: "☀️",
-        width: 65, height: 50,
+        width: 120, height: 90,
         displayName: "LDR Sensor",
         category: "sensor",
     },
@@ -155,7 +155,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#4A90D9",
         gradient: ["#5CA0E9", "#3070B9"],
         icon: "🌧️",
-        width: 75, height: 55,
+        width: 140, height: 100,
         displayName: "DHT11",
         category: "sensor",
     },
@@ -163,7 +163,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#2C2C2C",
         gradient: ["#444444", "#1A1A1A"],
         icon: "🔊",
-        width: 55, height: 50,
+        width: 110, height: 90,
         displayName: "Buzzer",
         category: "actuator",
     },
@@ -171,7 +171,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#CD5C5C",
         gradient: ["#E06C6C", "#AA3C3C"],
         icon: "🔘",
-        width: 50, height: 45,
+        width: 100, height: 90,
         displayName: "Button",
         category: "input",
     },
@@ -179,7 +179,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#2F4F4F",
         gradient: ["#3D6565", "#1F3535"],
         icon: "⚡",
-        width: 80, height: 55,
+        width: 150, height: 100,
         displayName: "Relay",
         category: "actuator",
     },
@@ -196,7 +196,7 @@ export function getComponentMeta(type: string): ComponentMeta {
         color: "#6C757D",
         gradient: ["#7D8E9D", "#4C5D6D"],
         icon: "❓",
-        width: 70, height: 50,
+        width: 140, height: 100,
         displayName: type,
         category: "sensor" as const,
     };
@@ -215,10 +215,10 @@ export function buildComponentVisuals(
     }
 
     const instances = Array.from(instanceSet);
-    const startX = 530;
-    const startY = 60;
-    const colSpacing = 170;
-    const rowSpacing = 110;
+    const startX = 760;
+    const startY = 80;
+    const colSpacing = 240;
+    const rowSpacing = 160;
 
     instances.forEach((instance, idx) => {
         const type = instance.replace(/_\d+$/, "");
@@ -237,8 +237,8 @@ export function buildComponentVisuals(
             const pinName = key.split(".")[1];
             const pinIdx = pins.length;
             pins.push({
-                x: x - 12,
-                y: y + 18 + pinIdx * 16,
+                x: x - 14,
+                y: y + 24 + pinIdx * 22,
                 label: pinName,
                 side: "left",
             });
@@ -250,7 +250,7 @@ export function buildComponentVisuals(
             x,
             y,
             width: meta.width,
-            height: Math.max(meta.height, pins.length * 16 + 30),
+            height: Math.max(meta.height, pins.length * 22 + 40),
             color: meta.color,
             pins,
         });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import {
     ARDUINO_UNO_PINS,
     BOARD_X,
@@ -24,11 +24,13 @@ interface CircuitRendererProps {
 //        glowing Bezier wires, and proper pin routing
 // ═══════════════════════════════════════════════════════════════
 
-const CANVAS_W = 960;
-const CANVAS_H = 640;
+const CANVAS_W = 1400;
+const CANVAS_H = 900;
 
-export default function CircuitRenderer({ pinMapping, needsBreadboard = false }: CircuitRendererProps) {
+const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(function CircuitRenderer({ pinMapping, needsBreadboard = false }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useImperativeHandle(ref, () => canvasRef.current as HTMLCanvasElement);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -115,12 +117,18 @@ export default function CircuitRenderer({ pinMapping, needsBreadboard = false }:
                 ref={canvasRef}
                 width={CANVAS_W}
                 height={CANVAS_H}
-                style={{ width: "100%", height: "auto" }}
+                style={{
+                    width: "100%",
+                    height: "auto",
+                    imageRendering: "crisp-edges" as const,
+                }}
                 className="block"
             />
         </div>
     );
-}
+});
+
+export default CircuitRenderer;
 
 // ═══════════════════════════════════════════════════════════════
 //  SVG IMAGE PRELOADER
@@ -429,7 +437,7 @@ function drawPinHeaders(ctx: CanvasRenderingContext2D) {
         // Pin hole background
         ctx.fillStyle = "#111";
         ctx.beginPath();
-        ctx.arc(pin.x, pin.y, 5, 0, Math.PI * 2);
+        ctx.arc(pin.x, pin.y, 7, 0, Math.PI * 2);
         ctx.fill();
 
         // Pin metallic ring
@@ -443,31 +451,31 @@ function drawPinHeaders(ctx: CanvasRenderingContext2D) {
         if (isGnd) ringColor = "#888888";
 
         ctx.strokeStyle = ringColor;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(pin.x, pin.y, 5, 0, Math.PI * 2);
+        ctx.arc(pin.x, pin.y, 7, 0, Math.PI * 2);
         ctx.stroke();
 
         // Center dot
         ctx.fillStyle = ringColor;
         ctx.beginPath();
-        ctx.arc(pin.x, pin.y, 2, 0, Math.PI * 2);
+        ctx.arc(pin.x, pin.y, 3, 0, Math.PI * 2);
         ctx.fill();
 
         // Label
-        ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.font = isPwm ? "bold 7px monospace" : "7px monospace";
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.font = isPwm ? "bold 10px monospace" : "10px monospace";
         ctx.textAlign = "center";
 
         if (pin.side === "top") {
-            ctx.fillText(pin.label, pin.x, pin.y - 12);
+            ctx.fillText(pin.label, pin.x, pin.y - 16);
             if (isPwm) {
-                ctx.fillStyle = "rgba(255,136,0,0.4)";
-                ctx.font = "5px monospace";
-                ctx.fillText("~", pin.x + 12, pin.y - 10);
+                ctx.fillStyle = "rgba(255,136,0,0.5)";
+                ctx.font = "7px monospace";
+                ctx.fillText("~", pin.x + 16, pin.y - 14);
             }
         } else {
-            ctx.fillText(pin.label, pin.x, pin.y + 18);
+            ctx.fillText(pin.label, pin.x, pin.y + 22);
         }
     }
 }
@@ -567,14 +575,14 @@ function drawComponent(
 //  BREADBOARD RENDERING
 // ═══════════════════════════════════════════════════════════════
 
-const BB_X = BOARD_X + BOARD_WIDTH + 20;
-const BB_Y = BOARD_Y + BOARD_HEIGHT + 40;
-const BB_W = 400;
-const BB_H = 60;
+const BB_X = BOARD_X;
+const BB_Y = BOARD_Y + BOARD_HEIGHT + 50;
+const BB_W = 560;
+const BB_H = 80;
 
 // Power rail positions
-const RAIL_VCC_Y = BB_Y + 14;
-const RAIL_GND_Y = BB_Y + BB_H - 14;
+const RAIL_VCC_Y = BB_Y + 18;
+const RAIL_GND_Y = BB_Y + BB_H - 18;
 
 function drawBreadboard(ctx: CanvasRenderingContext2D) {
     // Breadboard body
