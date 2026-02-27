@@ -1,8 +1,13 @@
 import { ComponentVisual, PinCoordinate } from "@/types/circuit";
+import {
+    type SvgParseResult,
+    svgToCanvas,
+    ARDUINO_CONNECTOR_MAP,
+    COMPONENT_CONNECTOR_MAPS,
+} from "@/lib/svgConnectorParser";
 
 // ═══════════════════════════════════════════════════════════════
-// Arduino Uno Pin Coordinates (Fritzing-based layout)
-// These map physical pin positions to (x, y) canvas coordinates
+// Board Layout Constants
 // ═══════════════════════════════════════════════════════════════
 
 const BOARD_X = 80;
@@ -10,51 +15,77 @@ const BOARD_Y = 100;
 const BOARD_WIDTH = 600;
 const BOARD_HEIGHT = 410;
 
-const PIN_SPACING = 38;
-const TOP_ROW_Y = BOARD_Y - 12;
-const BOTTOM_ROW_Y = BOARD_Y + BOARD_HEIGHT + 12;
+// ═══════════════════════════════════════════════════════════════
+// Arduino Pin Extraction from SVG
+// Falls back to hardcoded positions if SVG parsing is unavailable
+// ═══════════════════════════════════════════════════════════════
 
-export const ARDUINO_UNO_PINS: Record<string, PinCoordinate> = {};
+/** Build Arduino pin map from parsed SVG connector data */
+export function buildArduinoPinsFromSvg(
+    parsed: SvgParseResult
+): Record<string, PinCoordinate> {
+    const pins: Record<string, PinCoordinate> = {};
 
-// Digital pins D0-D13 (top row, right to left)
-for (let i = 0; i <= 13; i++) {
-    ARDUINO_UNO_PINS[`D${i}`] = {
-        x: BOARD_X + BOARD_WIDTH - 30 - i * PIN_SPACING,
-        y: TOP_ROW_Y,
-        label: `D${i}`,
-        side: "top",
-    };
+    for (const conn of parsed.connectors) {
+        const pinName = ARDUINO_CONNECTOR_MAP[conn.connectorId];
+        if (!pinName) continue;
+
+        // Transform SVG coords → canvas coords
+        const pos = svgToCanvas(
+            conn.x, conn.y,
+            parsed.viewBoxW, parsed.viewBoxH,
+            BOARD_X, BOARD_Y,
+            BOARD_WIDTH, BOARD_HEIGHT
+        );
+
+        // Determine side based on Y position in SVG
+        // Top row pins have cy≈7.2, bottom row cy≈144 in the Uno SVG
+        const normalizedY = conn.y / parsed.viewBoxH;
+        const side: "top" | "bottom" = normalizedY < 0.5 ? "top" : "bottom";
+
+        pins[pinName] = { x: pos.x, y: pos.y, label: pinName, side };
+    }
+
+    return pins;
 }
 
-// Analog pins A0-A5 (bottom row, right to left)
-for (let i = 0; i <= 5; i++) {
-    ARDUINO_UNO_PINS[`A${i}`] = {
-        x: BOARD_X + BOARD_WIDTH - 30 - i * PIN_SPACING,
-        y: BOTTOM_ROW_Y,
-        label: `A${i}`,
-        side: "bottom",
-    };
+/** Fallback: hardcoded Arduino pin positions (used if SVG parsing fails) */
+export function getHardcodedArduinoPins(): Record<string, PinCoordinate> {
+    const pins: Record<string, PinCoordinate> = {};
+    const PIN_SPACING = 38;
+    const TOP_ROW_Y = BOARD_Y - 12;
+    const BOTTOM_ROW_Y = BOARD_Y + BOARD_HEIGHT + 12;
+
+    for (let i = 0; i <= 13; i++) {
+        pins[`D${i}`] = {
+            x: BOARD_X + BOARD_WIDTH - 30 - i * PIN_SPACING,
+            y: TOP_ROW_Y,
+            label: `D${i}`,
+            side: "top",
+        };
+    }
+    for (let i = 0; i <= 5; i++) {
+        pins[`A${i}`] = {
+            x: BOARD_X + BOARD_WIDTH - 30 - i * PIN_SPACING,
+            y: BOTTOM_ROW_Y,
+            label: `A${i}`,
+            side: "bottom",
+        };
+    }
+    pins["5V"] = { x: BOARD_X + 60, y: BOTTOM_ROW_Y, label: "5V", side: "bottom" };
+    pins["3V3"] = { x: BOARD_X + 28, y: BOTTOM_ROW_Y, label: "3V3", side: "bottom" };
+    pins["GND"] = { x: BOARD_X + 92, y: BOTTOM_ROW_Y, label: "GND", side: "bottom" };
+
+    return pins;
 }
 
-// Power pins
-ARDUINO_UNO_PINS["5V"] = {
-    x: BOARD_X + 60,
-    y: BOTTOM_ROW_Y,
-    label: "5V",
-    side: "bottom",
-};
-ARDUINO_UNO_PINS["3V3"] = {
-    x: BOARD_X + 28,
-    y: BOTTOM_ROW_Y,
-    label: "3V3",
-    side: "bottom",
-};
-ARDUINO_UNO_PINS["GND"] = {
-    x: BOARD_X + 92,
-    y: BOTTOM_ROW_Y,
-    label: "GND",
-    side: "bottom",
-};
+// Default export for backward compatibility (overwritten at render time)
+export let ARDUINO_UNO_PINS: Record<string, PinCoordinate> = getHardcodedArduinoPins();
+
+/** Called by the renderer once SVG parsing succeeds */
+export function setArduinoPins(pins: Record<string, PinCoordinate>) {
+    ARDUINO_UNO_PINS = pins;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  COMPONENT METADATA — All 14 supported components
@@ -203,7 +234,8 @@ export function getComponentMeta(type: string): ComponentMeta {
 }
 
 export function buildComponentVisuals(
-    pinMapping: Record<string, string>
+    pinMapping: Record<string, string>,
+    svgParsedMap?: Map<string, SvgParseResult>
 ): ComponentVisual[] {
     const components: ComponentVisual[] = [];
     const instanceSet = new Set<string>();
@@ -232,9 +264,68 @@ export function buildComponentVisuals(
 
         // Collect pins for this instance
         const pins: PinCoordinate[] = [];
+        const svgParsed = svgParsedMap?.get(type);
+        const connMap = COMPONENT_CONNECTOR_MAPS[type];
+
+        // Build a reverse map: pinName → connectorId for this component type
+        const pinNameToConnId = new Map<string, string>();
+        if (connMap) {
+            for (const [connId, pinName] of Object.entries(connMap)) {
+                pinNameToConnId.set(pinName, connId);
+            }
+        }
+
         for (const [key] of Object.entries(pinMapping)) {
             if (!key.startsWith(instance + ".")) continue;
             const pinName = key.split(".")[1];
+
+            // Try SVG-extracted coordinates first
+            if (svgParsed && connMap) {
+                const connId = pinNameToConnId.get(pinName);
+                if (connId) {
+                    const conn = svgParsed.connectors.find(c => c.connectorId === connId);
+                    if (conn) {
+                        // Calculate where in the component box the SVG draws this pin
+                        // Component SVG is rendered in the box area (x, y, width, height-22)
+                        const svgAspect = svgParsed.viewBoxW / svgParsed.viewBoxH;
+                        const boxW = meta.width - 6;
+                        const boxH = Math.max(meta.height, pins.length * 22 + 40) - 22;
+                        let drawW: number, drawH: number;
+
+                        if (boxW / boxH > svgAspect) {
+                            drawH = boxH;
+                            drawW = drawH * svgAspect;
+                        } else {
+                            drawW = boxW;
+                            drawH = drawW / svgAspect;
+                        }
+
+                        const drawX = x + (meta.width - drawW) / 2;
+                        const drawY = y + 2;
+
+                        const pos = svgToCanvas(
+                            conn.x, conn.y,
+                            svgParsed.viewBoxW, svgParsed.viewBoxH,
+                            drawX, drawY,
+                            drawW, drawH
+                        );
+
+                        // Determine which side the pin is on
+                        const normalizedX = conn.x / svgParsed.viewBoxW;
+                        const side: "left" | "right" = normalizedX < 0.5 ? "left" : "right";
+
+                        pins.push({
+                            x: pos.x,
+                            y: pos.y,
+                            label: pinName,
+                            side,
+                        });
+                        continue;
+                    }
+                }
+            }
+
+            // Fallback: stack pins vertically on the left
             const pinIdx = pins.length;
             pins.push({
                 x: x - 14,

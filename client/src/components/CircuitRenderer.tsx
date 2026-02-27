@@ -10,8 +10,11 @@ import {
     buildComponentVisuals,
     getComponentMeta,
     getWireColor,
+    buildArduinoPinsFromSvg,
+    setArduinoPins,
 } from "@/lib/fritzing";
 import { RoutingGrid, findPath, type Point } from "@/lib/wireRouter";
+import { parseSvgConnectors, type SvgParseResult } from "@/lib/svgConnectorParser";
 
 interface CircuitRendererProps {
     pinMapping: Record<string, string>;
@@ -37,11 +40,46 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
 
-            const components = buildComponentVisuals(pinMapping);
-            const types = new Set(components.map((c) => c.type));
-            types.add("arduino_uno");
+            // Collect all component types
+            const instanceSet = new Set<string>();
+            for (const key of Object.keys(pinMapping)) {
+                instanceSet.add(key.split(".")[0]);
+            }
+            const componentTypes = Array.from(new Set(
+                Array.from(instanceSet).map(inst => inst.replace(/_\d+$/, ""))
+            ));
+            const allTypes = ["arduino_uno", ...componentTypes];
 
-            preloadComponentImages(Array.from(types)).then((imageMap) => {
+            // Parse SVGs for connector data + preload images — in parallel
+            const parsePromise = Promise.all(
+                allTypes.map(async (type) => {
+                    const result = await parseSvgConnectors(`/assets/components/${type}.svg`);
+                    return [type, result] as [string, SvgParseResult | null];
+                })
+            ).then(entries => {
+                const map = new Map<string, SvgParseResult>();
+                for (const [type, result] of entries) {
+                    if (result) map.set(type, result);
+                }
+                return map;
+            });
+
+            const imagePromise = preloadComponentImages(allTypes);
+
+            Promise.all([parsePromise, imagePromise]).then(([svgParsedMap, imageMap]) => {
+                // ─── Build Arduino pins from SVG data ───────
+                const arduinoParsed = svgParsedMap.get("arduino_uno");
+                if (arduinoParsed) {
+                    const svgPins = buildArduinoPinsFromSvg(arduinoParsed);
+                    // Only use SVG pins if we got a reasonable number
+                    if (Object.keys(svgPins).length >= 10) {
+                        setArduinoPins(svgPins);
+                    }
+                }
+
+                // ─── Build component visuals with SVG connector data ──
+                const components = buildComponentVisuals(pinMapping, svgParsedMap);
+
                 const dpr = window.devicePixelRatio || 2;
                 canvas.width = CANVAS_W * dpr;
                 canvas.height = CANVAS_H * dpr;
@@ -55,13 +93,10 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
 
                 // ─── Build routing grid & block obstacles ────
                 const grid = new RoutingGrid(CANVAS_W, CANVAS_H);
-                // Block Arduino board
                 grid.blockRegion(BOARD_X, BOARD_Y, BOARD_WIDTH, BOARD_HEIGHT);
-                // Block each component
                 for (const comp of components) {
                     grid.blockRegion(comp.x, comp.y, comp.width, comp.height);
                 }
-                // Unblock pin positions so pathfinder can reach them
                 for (const pin of Object.values(ARDUINO_UNO_PINS)) {
                     grid.unblockCell(pin.x, pin.y);
                 }
