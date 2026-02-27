@@ -360,15 +360,15 @@ function drawRoutedWires(
     components: ReturnType<typeof buildComponentVisuals>,
     needsBreadboard: boolean
 ) {
-    // Track wire groups going to same board pin for separation
-    const pinGroups = new Map<string, number>();
+    // Global wire index — every wire gets a unique separation offset
+    let globalWireIdx = 0;
 
     // If breadboard, draw power bus wires first
     if (needsBreadboard) {
         const vccPin = ARDUINO_UNO_PINS["5V"];
         const gndPin = ARDUINO_UNO_PINS["GND"];
-        if (vccPin) drawManhattanWire(ctx, grid, vccPin.x, vccPin.y, BB_X + 40, RAIL_VCC_Y, "#FF4444", 3);
-        if (gndPin) drawManhattanWire(ctx, grid, gndPin.x, gndPin.y, BB_X + 40, RAIL_GND_Y, "#4488FF", 3);
+        if (vccPin) drawManhattanWire(ctx, grid, vccPin.x, vccPin.y, BB_X + 40, RAIL_VCC_Y, "#FF4444", 3, globalWireIdx++);
+        if (gndPin) drawManhattanWire(ctx, grid, gndPin.x, gndPin.y, BB_X + 40, RAIL_GND_Y, "#4488FF", 3, globalWireIdx++);
     }
 
     let vccTapIdx = 0;
@@ -379,10 +379,8 @@ function drawRoutedWires(
         const boardPin = ARDUINO_UNO_PINS[boardPinId];
         if (!boardPin) continue;
 
-        const compVisual = components.find((c) => {
-            const instType = instance.replace(/_\d+$/, "");
-            return c.type === instType;
-        });
+        // Match by exact instance name (e.g., "led_red_0"), NOT by type
+        const compVisual = components.find((c) => c.instance === instance);
         if (!compVisual) continue;
         const compPin = compVisual.pins.find((p) => p.label === pinName);
         if (!compPin) continue;
@@ -391,25 +389,20 @@ function drawRoutedWires(
         const isPower = boardPinId === "5V" || boardPinId === "3V3";
         const isGround = boardPinId === "GND";
 
-        // Get wire offset for separation
-        const groupKey = boardPinId;
-        const offset = pinGroups.get(groupKey) || 0;
-        pinGroups.set(groupKey, offset + 1);
-
         // Wire thickness: power=3px, signal=2px
         const thickness = (isPower || isGround) ? 3 : 2;
 
         if (needsBreadboard && (isPower || isGround)) {
             // Route through breadboard rail
             const railY = isPower ? RAIL_VCC_Y : RAIL_GND_Y;
-            const tapX = BB_X + 80 + (isPower ? vccTapIdx++ : gndTapIdx++) * 40;
+            const tapX = BB_X + 80 + (isPower ? vccTapIdx++ : gndTapIdx++) * 50;
             const color = isPower ? "#FF4444" : "#4488FF";
-            drawManhattanWire(ctx, grid, tapX, railY, compPin.x, compPin.y, color, thickness);
+            drawManhattanWire(ctx, grid, tapX, railY, compPin.x, compPin.y, color, thickness, globalWireIdx++);
             drawEndpoint(ctx, tapX, railY, color);
             drawEndpoint(ctx, compPin.x, compPin.y, color);
         } else {
             // Direct routed wire: Arduino pin → component pin
-            drawManhattanWire(ctx, grid, boardPin.x, boardPin.y, compPin.x, compPin.y, wireColor, thickness, offset);
+            drawManhattanWire(ctx, grid, boardPin.x, boardPin.y, compPin.x, compPin.y, wireColor, thickness, globalWireIdx++);
             drawEndpoint(ctx, boardPin.x, boardPin.y, wireColor);
             drawEndpoint(ctx, compPin.x, compPin.y, wireColor);
         }

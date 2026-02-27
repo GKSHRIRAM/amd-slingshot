@@ -287,7 +287,7 @@ function simplifyPath(path: Point[]): Point[] {
 //  WIRE SEPARATION — Offset parallel wires
 // ═══════════════════════════════════════════════════════════════
 
-const WIRE_SEPARATION = 5; // px between parallel wires
+const WIRE_SEPARATION = 8; // px between parallel wires
 
 export function applyWireOffset(path: Point[], offsetIndex: number): Point[] {
     if (offsetIndex === 0 || path.length < 2) return path;

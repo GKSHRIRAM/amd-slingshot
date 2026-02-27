@@ -21,6 +21,7 @@ export interface PinCoordinate {
 }
 
 export interface ComponentVisual {
+    instance: string;
     type: string;
     displayName: string;
     x: number;

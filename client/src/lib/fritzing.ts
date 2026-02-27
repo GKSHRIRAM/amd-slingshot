@@ -245,6 +245,7 @@ export function buildComponentVisuals(
         }
 
         components.push({
+            instance,
             type,
             displayName: formatDisplayName(type, instance),
             x,
