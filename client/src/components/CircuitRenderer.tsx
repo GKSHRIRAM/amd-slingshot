@@ -37,58 +37,77 @@ export default function CircuitRenderer({ pinMapping, needsBreadboard = false }:
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const dpr = window.devicePixelRatio || 2;
-        canvas.width = CANVAS_W * dpr;
-        canvas.height = CANVAS_H * dpr;
-        ctx.scale(dpr, dpr);
-
-        // Enable smooth rendering
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-
-        // Clear
-        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-        // ─── Background ──────────────────────────────────────
-        const bgGrad = ctx.createRadialGradient(
-            CANVAS_W / 2, CANVAS_H / 2, 50,
-            CANVAS_W / 2, CANVAS_H / 2, CANVAS_W
-        );
-        bgGrad.addColorStop(0, "#151530");
-        bgGrad.addColorStop(1, "#0a0a1a");
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-        // Subtle dot grid
-        ctx.fillStyle = "rgba(255,255,255,0.02)";
-        for (let x = 0; x < CANVAS_W; x += 24) {
-            for (let y = 0; y < CANVAS_H; y += 24) {
-                ctx.beginPath();
-                ctx.arc(x, y, 1, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // ─── 1. DRAW WIRES FIRST (behind everything) ────────
         const components = buildComponentVisuals(pinMapping);
-        drawWires(ctx, pinMapping, components, needsBreadboard);
 
-        // ─── 2. DRAW BREADBOARD (if needed) ──────────────────
-        if (needsBreadboard) {
-            drawBreadboard(ctx);
-        }
+        // Collect unique component types that need SVG images
+        const types = new Set(components.map((c) => c.type));
+        // Always load the Arduino board SVG
+        types.add("arduino_uno");
 
-        // ─── 3. DRAW ARDUINO BOARD ───────────────────────────
-        drawArduinoBoard(ctx);
+        // Preload all SVG images, then render everything
+        preloadComponentImages(Array.from(types)).then((imageMap) => {
+            const dpr = window.devicePixelRatio || 2;
+            canvas.width = CANVAS_W * dpr;
+            canvas.height = CANVAS_H * dpr;
+            ctx.scale(dpr, dpr);
 
-        // ─── 3. DRAW COMPONENTS ──────────────────────────────
-        for (const comp of components) {
-            drawComponent(ctx, comp);
-        }
+            // Enable smooth rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
 
-        // ─── 4. DRAW LEGEND ──────────────────────────────────
-        drawLegend(ctx);
-    }, [pinMapping]);
+            // Clear
+            ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+            // ─── Background ──────────────────────────────────
+            const bgGrad = ctx.createRadialGradient(
+                CANVAS_W / 2, CANVAS_H / 2, 50,
+                CANVAS_W / 2, CANVAS_H / 2, CANVAS_W
+            );
+            bgGrad.addColorStop(0, "#151530");
+            bgGrad.addColorStop(1, "#0a0a1a");
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+            // Subtle dot grid
+            ctx.fillStyle = "rgba(255,255,255,0.02)";
+            for (let x = 0; x < CANVAS_W; x += 24) {
+                for (let y = 0; y < CANVAS_H; y += 24) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // ─── 1. DRAW WIRES (behind everything) ──────────
+            drawWires(ctx, pinMapping, components, needsBreadboard);
+
+            // ─── 2. DRAW BREADBOARD (if needed) ─────────────
+            if (needsBreadboard) {
+                drawBreadboard(ctx);
+            }
+
+            // ─── 3. DRAW ARDUINO BOARD ──────────────────────
+            const arduinoImg = imageMap.get("arduino_uno");
+            if (arduinoImg) {
+                drawArduinoBoardWithSVG(ctx, arduinoImg);
+            } else {
+                drawArduinoBoard(ctx);
+            }
+
+            // ─── 4. DRAW COMPONENTS ─────────────────────────
+            for (const comp of components) {
+                const img = imageMap.get(comp.type);
+                if (img) {
+                    drawComponentWithSVG(ctx, comp, img);
+                } else {
+                    drawComponent(ctx, comp);
+                }
+            }
+
+            // ─── 5. DRAW LEGEND ─────────────────────────────
+            drawLegend(ctx);
+        });
+    }, [pinMapping, needsBreadboard]);
 
     return (
         <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0a0a1a]">
@@ -104,7 +123,145 @@ export default function CircuitRenderer({ pinMapping, needsBreadboard = false }:
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ARDUINO BOARD RENDERING
+//  SVG IMAGE PRELOADER
+// ═══════════════════════════════════════════════════════════════
+
+function preloadComponentImages(types: string[]): Promise<Map<string, HTMLImageElement>> {
+    return new Promise((resolve) => {
+        const imageMap = new Map<string, HTMLImageElement>();
+        let loaded = 0;
+        const total = types.length;
+
+        if (total === 0) {
+            resolve(imageMap);
+            return;
+        }
+
+        for (const type of types) {
+            const img = new Image();
+            img.onload = () => {
+                imageMap.set(type, img);
+                loaded++;
+                if (loaded === total) resolve(imageMap);
+            };
+            img.onerror = () => {
+                // SVG failed to load — skip it, fallback to gradient
+                console.warn(`Failed to load SVG for: ${type}`);
+                loaded++;
+                if (loaded === total) resolve(imageMap);
+            };
+            img.src = `/assets/components/${type}.svg`;
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ARDUINO BOARD WITH FRITZING SVG
+// ═══════════════════════════════════════════════════════════════
+
+function drawArduinoBoardWithSVG(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+    // Shadow
+    ctx.shadowColor = "rgba(0, 180, 100, 0.25)";
+    ctx.shadowBlur = 30;
+    ctx.shadowOffsetY = 6;
+
+    // Draw the Fritzing SVG scaled to our board dimensions
+    ctx.drawImage(img, BOARD_X, BOARD_Y, BOARD_WIDTH, BOARD_HEIGHT);
+
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+
+    // Overlay pin headers on top of the SVG
+    drawPinHeaders(ctx);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  COMPONENT WITH FRITZING SVG
+// ═══════════════════════════════════════════════════════════════
+
+function drawComponentWithSVG(
+    ctx: CanvasRenderingContext2D,
+    comp: ReturnType<typeof buildComponentVisuals>[0],
+    img: HTMLImageElement
+) {
+    const meta = getComponentMeta(comp.type);
+    const { x, y, width, height } = comp;
+
+    // Drop shadow
+    ctx.shadowColor = `${meta.color}44`;
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
+
+    // Semi-transparent backing panel
+    ctx.fillStyle = "rgba(20,20,35,0.85)";
+    roundRect(ctx, x - 4, y - 4, width + 8, height + 8, 10);
+    ctx.fill();
+
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+
+    // Glow border
+    ctx.strokeStyle = `${meta.color}66`;
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, x - 4, y - 4, width + 8, height + 8, 10);
+    ctx.stroke();
+
+    // Draw the Fritzing SVG — scale proportionally within bounds
+    const svgAspect = img.naturalWidth / img.naturalHeight;
+    const boxW = width - 8;
+    const boxH = height - 28;  // Leave space for label
+    let drawW: number, drawH: number;
+
+    if (boxW / boxH > svgAspect) {
+        drawH = boxH;
+        drawW = drawH * svgAspect;
+    } else {
+        drawW = boxW;
+        drawH = drawW / svgAspect;
+    }
+
+    const drawX = x + (width - drawW) / 2;
+    const drawY = y + 4;
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+    // Component name below SVG
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 9px 'Inter', 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(comp.displayName, x + width / 2, y + height - 4);
+
+    // Pin connector dots and labels
+    for (const pin of comp.pins) {
+        // Pin hole
+        ctx.fillStyle = "#222";
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pin ring
+        const pinColor = getWireColor(pin.label);
+        ctx.strokeStyle = pinColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Pin center
+        ctx.fillStyle = pinColor;
+        ctx.beginPath();
+        ctx.arc(pin.x, pin.y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pin label
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.font = "bold 7px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(pin.label, pin.x - 8, pin.y + 3);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ARDUINO BOARD RENDERING (FALLBACK — no SVG)
 // ═══════════════════════════════════════════════════════════════
 
 function drawArduinoBoard(ctx: CanvasRenderingContext2D) {
