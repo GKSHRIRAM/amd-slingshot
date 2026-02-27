@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/IoTCircuitBuilder.API/IoTCircuitBuilder.API.csproj" />
+    <Project Path="src/IoTCircuitBuilder.Application/IoTCircuitBuilder.Application.csproj" />
+    <Project Path="src/IoTCircuitBuilder.Core/IoTCircuitBuilder.Core.csproj" />
+    <Project Path="src/IoTCircuitBuilder.Domain/IoTCircuitBuilder.Domain.csproj" />
+    <Project Path="src/IoTCircuitBuilder.Infrastructure/IoTCircuitBuilder.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IoTCircuitBuilder.Tests/IoTCircuitBuilder.Tests.csproj" />
+  </Folder>
+</Solution>

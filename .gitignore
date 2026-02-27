@@ -1,0 +1,44 @@
+# .NET
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+*.user
+*.suo
+*.DotSettings.user
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Build
+[Dd]ebug/
+[Rr]elease/
+publish/
+
+# NuGet
+*.nupkg
+packages/
+
+# Logs
+logs/
+*.log
+
+# Next.js / Node
+client/node_modules/
+client/.next/
+client/out/
+
+# Environment
+.env
+.env.local
+*.env.local
+
+# Secrets — NEVER commit API keys
+appsettings.Development.json
+
+# OS
+Thumbs.db
+.DS_Store

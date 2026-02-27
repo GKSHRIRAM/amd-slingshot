@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a1a;
+  --foreground: #ededed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Code block styling */
+pre {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* Subtle glow animation */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  }
+}
+
+.animate-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
