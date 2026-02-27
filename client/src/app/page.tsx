@@ -202,7 +202,7 @@ export default function Home() {
               {/* Circuit Tab */}
               {activeTab === "circuit" && result.pinMapping && (
                 <div className="p-4">
-                  <CircuitRenderer pinMapping={result.pinMapping} />
+                  <CircuitRenderer pinMapping={result.pinMapping} needsBreadboard={result.needsBreadboard} />
                 </div>
               )}
 

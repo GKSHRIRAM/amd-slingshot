@@ -15,6 +15,7 @@ import {
 
 interface CircuitRendererProps {
     pinMapping: Record<string, string>;
+    needsBreadboard?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -24,9 +25,9 @@ interface CircuitRendererProps {
 // ═══════════════════════════════════════════════════════════════
 
 const CANVAS_W = 960;
-const CANVAS_H = 560;
+const CANVAS_H = 640;
 
-export default function CircuitRenderer({ pinMapping }: CircuitRendererProps) {
+export default function CircuitRenderer({ pinMapping, needsBreadboard = false }: CircuitRendererProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -70,9 +71,14 @@ export default function CircuitRenderer({ pinMapping }: CircuitRendererProps) {
 
         // ─── 1. DRAW WIRES FIRST (behind everything) ────────
         const components = buildComponentVisuals(pinMapping);
-        drawWires(ctx, pinMapping, components);
+        drawWires(ctx, pinMapping, components, needsBreadboard);
 
-        // ─── 2. DRAW ARDUINO BOARD ───────────────────────────
+        // ─── 2. DRAW BREADBOARD (if needed) ──────────────────
+        if (needsBreadboard) {
+            drawBreadboard(ctx);
+        }
+
+        // ─── 3. DRAW ARDUINO BOARD ───────────────────────────
         drawArduinoBoard(ctx);
 
         // ─── 3. DRAW COMPONENTS ──────────────────────────────
@@ -401,14 +407,122 @@ function drawComponent(
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  WIRE RENDERING — Glowing Bezier curves with depth
+//  BREADBOARD RENDERING
+// ═══════════════════════════════════════════════════════════════
+
+const BB_X = BOARD_X + BOARD_WIDTH + 20;
+const BB_Y = BOARD_Y + BOARD_HEIGHT + 40;
+const BB_W = 400;
+const BB_H = 60;
+
+// Power rail positions
+const RAIL_VCC_Y = BB_Y + 14;
+const RAIL_GND_Y = BB_Y + BB_H - 14;
+
+function drawBreadboard(ctx: CanvasRenderingContext2D) {
+    // Breadboard body
+    ctx.shadowColor = "rgba(200,200,200,0.1)";
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 3;
+
+    const bbGrad = ctx.createLinearGradient(BB_X, BB_Y, BB_X, BB_Y + BB_H);
+    bbGrad.addColorStop(0, "#f5f0e8");
+    bbGrad.addColorStop(0.5, "#eee8d8");
+    bbGrad.addColorStop(1, "#e0d8c8");
+    ctx.fillStyle = bbGrad;
+    roundRect(ctx, BB_X, BB_Y, BB_W, BB_H, 5);
+    ctx.fill();
+
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = "#ccc";
+    ctx.lineWidth = 1;
+    roundRect(ctx, BB_X, BB_Y, BB_W, BB_H, 5);
+    ctx.stroke();
+
+    // Red power rail stripe
+    ctx.fillStyle = "#FF444433";
+    ctx.fillRect(BB_X + 10, RAIL_VCC_Y - 5, BB_W - 20, 10);
+    ctx.strokeStyle = "#FF4444";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(BB_X + 10, RAIL_VCC_Y);
+    ctx.lineTo(BB_X + BB_W - 10, RAIL_VCC_Y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // "+" label
+    ctx.fillStyle = "#FF4444";
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("+", BB_X + 3, RAIL_VCC_Y + 4);
+
+    // Blue ground rail stripe
+    ctx.fillStyle = "#4488FF33";
+    ctx.fillRect(BB_X + 10, RAIL_GND_Y - 5, BB_W - 20, 10);
+    ctx.strokeStyle = "#4488FF";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(BB_X + 10, RAIL_GND_Y);
+    ctx.lineTo(BB_X + BB_W - 10, RAIL_GND_Y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // "-" label
+    ctx.fillStyle = "#4488FF";
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("−", BB_X + 3, RAIL_GND_Y + 4);
+
+    // Pin holes on both rails
+    for (let i = 0; i < 30; i++) {
+        const hx = BB_X + 20 + i * 12;
+        // VCC rail holes
+        ctx.fillStyle = "#bbb";
+        ctx.beginPath();
+        ctx.arc(hx, RAIL_VCC_Y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        // GND rail holes
+        ctx.beginPath();
+        ctx.arc(hx, RAIL_GND_Y, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Label
+    ctx.fillStyle = "#888";
+    ctx.font = "bold 7px 'Inter', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("BREADBOARD — POWER RAILS", BB_X + BB_W / 2, BB_Y - 4);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WIRE RENDERING — Glowing Bezier curves with breadboard routing
 // ═══════════════════════════════════════════════════════════════
 
 function drawWires(
     ctx: CanvasRenderingContext2D,
     pinMapping: Record<string, string>,
-    components: ReturnType<typeof buildComponentVisuals>
+    components: ReturnType<typeof buildComponentVisuals>,
+    needsBreadboard: boolean
 ) {
+    // If breadboard is needed, draw a single wire from Arduino 5V/GND to breadboard rails first
+    if (needsBreadboard) {
+        const vccPin = ARDUINO_UNO_PINS["5V"];
+        const gndPin = ARDUINO_UNO_PINS["GND"];
+        if (vccPin) {
+            drawBezierWire(ctx, vccPin.x, vccPin.y, BB_X + 30, RAIL_VCC_Y, "#FF4444", "rgba(255,68,68,0.3)");
+        }
+        if (gndPin) {
+            drawBezierWire(ctx, gndPin.x, gndPin.y, BB_X + 30, RAIL_GND_Y, "#4488FF", "rgba(68,136,255,0.3)");
+        }
+    }
+
+    let vccTapIndex = 0;
+    let gndTapIndex = 0;
+
     for (const [key, boardPinId] of Object.entries(pinMapping)) {
         const [instance, pinName] = key.split(".");
         const boardPin = ARDUINO_UNO_PINS[boardPinId];
@@ -427,48 +541,64 @@ function drawWires(
         const wireColor = getWireColor(pinName);
         const glowColor = getWireGlow(pinName);
 
-        const fromX = boardPin.x;
-        const fromY = boardPin.y;
-        const toX = compPin.x;
-        const toY = compPin.y;
+        const isPower = boardPinId === "5V" || boardPinId === "3V3";
+        const isGround = boardPinId === "GND";
 
-        // Control points for smooth S-curve
-        const dx = Math.abs(toX - fromX);
-        const cp1x = fromX + dx * 0.4;
-        const cp1y = fromY;
-        const cp2x = toX - dx * 0.4;
-        const cp2y = toY;
+        if (needsBreadboard && (isPower || isGround)) {
+            // Route through breadboard: rail → component
+            const railY = isPower ? RAIL_VCC_Y : RAIL_GND_Y;
+            const tapX = BB_X + 60 + (isPower ? vccTapIndex++ : gndTapIndex++) * 40;
+            const color = isPower ? "#FF4444" : "#4488FF";
+            const glow = isPower ? "rgba(255,68,68,0.3)" : "rgba(68,136,255,0.3)";
 
-        // Outer glow (wide, blurred)
-        ctx.strokeStyle = glowColor;
-        ctx.lineWidth = 6;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(fromX, fromY);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
-        ctx.stroke();
-
-        // Core wire
-        ctx.strokeStyle = wireColor;
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(fromX, fromY);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
-        ctx.stroke();
-
-        // Inner highlight (thin, bright)
-        ctx.strokeStyle = `${wireColor}66`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(fromX, fromY);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
-        ctx.stroke();
-
-        // Solder joints at endpoints
-        drawSolderJoint(ctx, fromX, fromY, wireColor);
-        drawSolderJoint(ctx, toX, toY, wireColor);
+            drawBezierWire(ctx, tapX, railY, compPin.x, compPin.y, color, glow);
+            drawSolderJoint(ctx, tapX, railY, color);
+            drawSolderJoint(ctx, compPin.x, compPin.y, color);
+        } else {
+            // Direct wire: Arduino pin → component pin
+            drawBezierWire(ctx, boardPin.x, boardPin.y, compPin.x, compPin.y, wireColor, glowColor);
+            drawSolderJoint(ctx, boardPin.x, boardPin.y, wireColor);
+            drawSolderJoint(ctx, compPin.x, compPin.y, wireColor);
+        }
     }
+}
+
+function drawBezierWire(
+    ctx: CanvasRenderingContext2D,
+    fromX: number, fromY: number, toX: number, toY: number,
+    wireColor: string, glowColor: string
+) {
+    const dx = Math.abs(toX - fromX);
+    const cp1x = fromX + dx * 0.4;
+    const cp1y = fromY;
+    const cp2x = toX - dx * 0.4;
+    const cp2y = toY;
+
+    // Outer glow
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
+    ctx.stroke();
+
+    // Core wire
+    ctx.strokeStyle = wireColor;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
+    ctx.stroke();
+
+    // Inner highlight
+    ctx.strokeStyle = `${wireColor}66`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
+    ctx.stroke();
 }
 
 function drawSolderJoint(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {

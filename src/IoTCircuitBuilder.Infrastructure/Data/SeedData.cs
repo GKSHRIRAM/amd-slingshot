@@ -340,86 +340,196 @@ public static class SeedData
     private static void SeedCodeTemplates(ModelBuilder mb)
     {
         mb.Entity<CodeTemplate>().HasData(
-            // IR Sensor templates
+            // ═══════════════════════════════════════════════════════════════
+            //  IR Sensor — reads digital output, prints detection status
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 1, ComponentId = 1, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "pinMode({{ pin_out }}, INPUT);  // {{ display_name }}" },
             new CodeTemplate { TemplateId = 2, ComponentId = 1, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "int {{ var_name }} = digitalRead({{ pin_out }});" },
+                TemplateContent = @"int ir_{{ instance_id }} = digitalRead({{ pin_out }});
+Serial.print(""IR Sensor {{ instance_id }}: "");
+Serial.println(ir_{{ instance_id }} == LOW ? ""DETECTED"" : ""clear"");" },
 
-            // HC-SR04 templates
+            // ═══════════════════════════════════════════════════════════════
+            //  HC-SR04 Ultrasonic — measures distance, prints to serial
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 3, ComponentId = 2, TemplateType = "declaration", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "NewPing sonar_{{ instance_id }}({{ pin_trig }}, {{ pin_echo }}, 200);" },
             new CodeTemplate { TemplateId = 4, ComponentId = 2, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "unsigned int distance_{{ instance_id }} = sonar_{{ instance_id }}.ping_cm();" },
+                TemplateContent = @"unsigned int distance_{{ instance_id }} = sonar_{{ instance_id }}.ping_cm();
+Serial.print(""Distance {{ instance_id }}: "");
+Serial.print(distance_{{ instance_id }});
+Serial.println("" cm"");" },
 
-            // L298N templates
+            // ═══════════════════════════════════════════════════════════════
+            //  L298N Motor Driver — sets up pins, runs motors forward
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 5, ComponentId = 3, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = @"pinMode({{ pin_ena }}, OUTPUT);
-pinMode({{ pin_in1 }}, OUTPUT);
+                TemplateContent = @"pinMode({{ pin_ena }}, OUTPUT);  // Motor A speed (PWM)
+pinMode({{ pin_in1 }}, OUTPUT);  // Motor A direction
 pinMode({{ pin_in2 }}, OUTPUT);
-pinMode({{ pin_enb }}, OUTPUT);
-pinMode({{ pin_in3 }}, OUTPUT);
+pinMode({{ pin_enb }}, OUTPUT);  // Motor B speed (PWM)
+pinMode({{ pin_in3 }}, OUTPUT);  // Motor B direction
 pinMode({{ pin_in4 }}, OUTPUT);" },
+            new CodeTemplate { TemplateId = 23, ComponentId = 3, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"// Drive both motors FORWARD at 75% speed
+digitalWrite({{ pin_in1 }}, HIGH);
+digitalWrite({{ pin_in2 }}, LOW);
+analogWrite({{ pin_ena }}, 190);  // 0-255 speed
 
-            // Servo templates
+digitalWrite({{ pin_in3 }}, HIGH);
+digitalWrite({{ pin_in4 }}, LOW);
+analogWrite({{ pin_enb }}, 190);
+
+Serial.println(""Motors: FORWARD at 75%"");" },
+
+            // ═══════════════════════════════════════════════════════════════
+            //  Servo — declaration, attach, sweep in loop
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 6, ComponentId = 5, TemplateType = "declaration", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "Servo servo_{{ instance_id }};" },
             new CodeTemplate { TemplateId = 7, ComponentId = 5, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "servo_{{ instance_id }}.attach({{ pin_signal }});" },
+                TemplateContent = @"servo_{{ instance_id }}.attach({{ pin_signal }});
+servo_{{ instance_id }}.write(90);  // Center position" },
+            new CodeTemplate { TemplateId = 24, ComponentId = 5, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"// Sweep servo {{ instance_id }}: 0° → 180° → 0°
+for (int angle = 0; angle <= 180; angle += 5) {
+  servo_{{ instance_id }}.write(angle);
+  delay(15);
+}
+for (int angle = 180; angle >= 0; angle -= 5) {
+  servo_{{ instance_id }}.write(angle);
+  delay(15);
+}" },
 
-            // LED templates
+            // ═══════════════════════════════════════════════════════════════
+            //  Red LED — blink pattern
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 8, ComponentId = 6, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "pinMode({{ pin_anode }}, OUTPUT);  // {{ display_name }}" },
+            new CodeTemplate { TemplateId = 25, ComponentId = 6, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"digitalWrite({{ pin_anode }}, HIGH);  // LED {{ instance_id }} ON
+delay(500);
+digitalWrite({{ pin_anode }}, LOW);   // LED {{ instance_id }} OFF
+delay(500);" },
 
-            // Potentiometer templates
+            // ═══════════════════════════════════════════════════════════════
+            //  Potentiometer — reads analog value, prints mapped range
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 9, ComponentId = 7, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "int pot_{{ instance_id }} = analogRead({{ pin_signal }});  // 0-1023" },
+                TemplateContent = @"int pot_{{ instance_id }} = analogRead({{ pin_signal }});  // 0-1023
+int mapped_{{ instance_id }} = map(pot_{{ instance_id }}, 0, 1023, 0, 180);  // Map to 0-180
+Serial.print(""Pot {{ instance_id }}: "");
+Serial.print(pot_{{ instance_id }});
+Serial.print("" → mapped: "");
+Serial.println(mapped_{{ instance_id }});" },
 
-            // BME280 templates
+            // ═══════════════════════════════════════════════════════════════
+            //  BME280 — reads temp/humidity/pressure, prints all values
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 10, ComponentId = 8, TemplateType = "declaration", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "Adafruit_BME280 bme_{{ instance_id }};" },
             new CodeTemplate { TemplateId = 11, ComponentId = 8, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = @"Wire.begin();
-if (!bme_{{ instance_id }}.begin(0x76)) { Serial.println(""BME280 not found!""); }" },
+if (!bme_{{ instance_id }}.begin(0x76)) {
+  Serial.println(""BME280 not found! Check wiring."");
+  while (1) delay(10);  // Halt if sensor missing
+}" },
             new CodeTemplate { TemplateId = 12, ComponentId = 8, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = @"float temp_{{ instance_id }} = bme_{{ instance_id }}.readTemperature();
 float hum_{{ instance_id }} = bme_{{ instance_id }}.readHumidity();
-float pres_{{ instance_id }} = bme_{{ instance_id }}.readPressure() / 100.0F;" },
+float pres_{{ instance_id }} = bme_{{ instance_id }}.readPressure() / 100.0F;
+Serial.print(""Temp: ""); Serial.print(temp_{{ instance_id }}); Serial.print(""°C  "");
+Serial.print(""Humidity: ""); Serial.print(hum_{{ instance_id }}); Serial.print(""%  "");
+Serial.print(""Pressure: ""); Serial.print(pres_{{ instance_id }}); Serial.println("" hPa"");" },
 
-            // OLED templates
+            // ═══════════════════════════════════════════════════════════════
+            //  SSD1306 OLED — draws text to screen in loop
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 13, ComponentId = 9, TemplateType = "declaration", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "#define SCREEN_WIDTH 128\n#define SCREEN_HEIGHT 64\nAdafruit_SSD1306 display_{{ instance_id }}(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);" },
             new CodeTemplate { TemplateId = 14, ComponentId = 9, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = @"if (!display_{{ instance_id }}.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { Serial.println(""OLED not found!""); }
+                TemplateContent = @"if (!display_{{ instance_id }}.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+  Serial.println(""OLED not found! Check wiring."");
+  while (1) delay(10);  // Halt if display missing
+}
 display_{{ instance_id }}.clearDisplay();
 display_{{ instance_id }}.setTextSize(1);
 display_{{ instance_id }}.setTextColor(SSD1306_WHITE);" },
+            new CodeTemplate { TemplateId = 26, ComponentId = 9, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"display_{{ instance_id }}.clearDisplay();
+display_{{ instance_id }}.setCursor(0, 0);
+display_{{ instance_id }}.println(""IoT Circuit Builder"");
+display_{{ instance_id }}.println(""──────────────────"");
+display_{{ instance_id }}.print(""Uptime: "");
+display_{{ instance_id }}.print(millis() / 1000);
+display_{{ instance_id }}.println(""s"");
+display_{{ instance_id }}.display();" },
 
-            // LDR templates
+            // ═══════════════════════════════════════════════════════════════
+            //  LDR Light Sensor — reads analog, prints light level
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 15, ComponentId = 10, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "int light_{{ instance_id }} = analogRead({{ pin_signal }});  // 0=dark, 1023=bright" },
+                TemplateContent = @"int light_{{ instance_id }} = analogRead({{ pin_signal }});  // 0=dark, 1023=bright
+Serial.print(""Light {{ instance_id }}: "");
+Serial.print(light_{{ instance_id }});
+Serial.println(light_{{ instance_id }} < 300 ? "" (DARK)"" : "" (BRIGHT)"");" },
 
-            // DHT11 templates
+            // ═══════════════════════════════════════════════════════════════
+            //  DHT11 — reads temp + humidity with NaN check
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 16, ComponentId = 11, TemplateType = "declaration", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "DHT dht_{{ instance_id }}({{ pin_data }}, DHT11);" },
             new CodeTemplate { TemplateId = 17, ComponentId = 11, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 TemplateContent = "dht_{{ instance_id }}.begin();" },
             new CodeTemplate { TemplateId = 18, ComponentId = 11, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "float temp_{{ instance_id }} = dht_{{ instance_id }}.readTemperature();\nfloat hum_{{ instance_id }} = dht_{{ instance_id }}.readHumidity();" },
+                TemplateContent = @"float temp_{{ instance_id }} = dht_{{ instance_id }}.readTemperature();
+float hum_{{ instance_id }} = dht_{{ instance_id }}.readHumidity();
+if (isnan(temp_{{ instance_id }}) || isnan(hum_{{ instance_id }})) {
+  Serial.println(""DHT {{ instance_id }}: Read failed!"");
+} else {
+  Serial.print(""DHT {{ instance_id }}: "");
+  Serial.print(temp_{{ instance_id }}); Serial.print(""°C  "");
+  Serial.print(hum_{{ instance_id }}); Serial.println(""%"");
+}" },
 
-            // Buzzer templates
+            // ═══════════════════════════════════════════════════════════════
+            //  Buzzer — plays tone pattern
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 19, ComponentId = 12, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "pinMode({{ pin_signal }}, OUTPUT);" },
+                TemplateContent = "pinMode({{ pin_signal }}, OUTPUT);  // {{ display_name }}" },
+            new CodeTemplate { TemplateId = 27, ComponentId = 12, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"tone({{ pin_signal }}, 1000, 200);  // 1kHz beep for 200ms
+delay(300);
+tone({{ pin_signal }}, 1500, 200);  // 1.5kHz beep
+delay(300);
+noTone({{ pin_signal }});
+Serial.println(""Buzzer: beep pattern"");" },
 
-            // Push Button templates
+            // ═══════════════════════════════════════════════════════════════
+            //  Push Button — reads state, controls LED-like behavior
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 20, ComponentId = 13, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "pinMode({{ pin_signal }}, INPUT_PULLUP);  // {{ display_name }}" },
+                TemplateContent = "pinMode({{ pin_signal }}, INPUT_PULLUP);  // {{ display_name }} (LOW = pressed)" },
             new CodeTemplate { TemplateId = 21, ComponentId = 13, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "bool btn_{{ instance_id }} = !digitalRead({{ pin_signal }});  // LOW = pressed" },
+                TemplateContent = @"bool btn_{{ instance_id }} = !digitalRead({{ pin_signal }});  // LOW = pressed
+if (btn_{{ instance_id }}) {
+  Serial.println(""Button {{ instance_id }}: PRESSED"");
+}" },
 
-            // Relay templates
+            // ═══════════════════════════════════════════════════════════════
+            //  Relay Module — toggles on/off with 2-second interval
+            // ═══════════════════════════════════════════════════════════════
             new CodeTemplate { TemplateId = 22, ComponentId = 14, TemplateType = "setup", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                TemplateContent = "pinMode({{ pin_signal }}, OUTPUT);\ndigitalWrite({{ pin_signal }}, HIGH);  // Relay OFF (active LOW)" }
+                TemplateContent = @"pinMode({{ pin_signal }}, OUTPUT);
+digitalWrite({{ pin_signal }}, HIGH);  // Relay OFF (active LOW)" },
+            new CodeTemplate { TemplateId = 28, ComponentId = 14, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"digitalWrite({{ pin_signal }}, LOW);   // Relay ON
+Serial.println(""Relay {{ instance_id }}: ON"");
+delay(2000);
+digitalWrite({{ pin_signal }}, HIGH);  // Relay OFF
+Serial.println(""Relay {{ instance_id }}: OFF"");
+delay(2000);" }
         );
     }
 
