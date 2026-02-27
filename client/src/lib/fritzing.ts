@@ -5,12 +5,12 @@ import { ComponentVisual, PinCoordinate } from "@/types/circuit";
 // These map physical pin positions to (x, y) canvas coordinates
 // ═══════════════════════════════════════════════════════════════
 
-const BOARD_X = 80;
-const BOARD_Y = 100;
-const BOARD_WIDTH = 340;
-const BOARD_HEIGHT = 220;
+const BOARD_X = 60;
+const BOARD_Y = 80;
+const BOARD_WIDTH = 380;
+const BOARD_HEIGHT = 260;
 
-const PIN_SPACING = 22;
+const PIN_SPACING = 24;
 const TOP_ROW_Y = BOARD_Y - 8;
 const BOTTOM_ROW_Y = BOARD_Y + BOARD_HEIGHT + 8;
 
@@ -56,26 +56,151 @@ ARDUINO_UNO_PINS["GND"] = {
     side: "bottom",
 };
 
-// ─── Component Visual Defaults ──────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  COMPONENT METADATA — All 14 supported components
+// ═══════════════════════════════════════════════════════════════
 
-const COMPONENT_COLORS: Record<string, string> = {
-    ir_sensor: "#FF6B35",
-    hc_sr04_ultrasonic: "#4ECDC4",
-    l298n_motor_driver: "#E63946",
-    dc_motor: "#457B9D",
-    sg90_servo: "#2A9D8F",
-    led_red: "#E76F51",
-    default: "#6C757D",
+interface ComponentMeta {
+    color: string;
+    gradient: [string, string];  // Top → Bottom gradient
+    icon: string;
+    width: number;
+    height: number;
+    displayName: string;
+    category: "sensor" | "actuator" | "driver" | "input" | "indicator" | "display";
+}
+
+const COMPONENT_META: Record<string, ComponentMeta> = {
+    ir_sensor: {
+        color: "#FF6B35",
+        gradient: ["#FF8855", "#CC4411"],
+        icon: "📡",
+        width: 80, height: 55,
+        displayName: "IR Sensor",
+        category: "sensor",
+    },
+    hc_sr04_ultrasonic: {
+        color: "#4ECDC4",
+        gradient: ["#5FE0D7", "#2BA89F"],
+        icon: "📏",
+        width: 100, height: 55,
+        displayName: "HC-SR04",
+        category: "sensor",
+    },
+    l298n_motor_driver: {
+        color: "#E63946",
+        gradient: ["#FF4D5A", "#B8202D"],
+        icon: "⚙️",
+        width: 110, height: 70,
+        displayName: "L298N Driver",
+        category: "driver",
+    },
+    dc_motor: {
+        color: "#457B9D",
+        gradient: ["#5A8FAF", "#2D5F7D"],
+        icon: "🔄",
+        width: 70, height: 55,
+        displayName: "DC Motor",
+        category: "actuator",
+    },
+    sg90_servo: {
+        color: "#2A9D8F",
+        gradient: ["#35B8A8", "#1E7A6F"],
+        icon: "🦾",
+        width: 80, height: 55,
+        displayName: "SG90 Servo",
+        category: "actuator",
+    },
+    led_red: {
+        color: "#E76F51",
+        gradient: ["#FF8866", "#CC4433"],
+        icon: "💡",
+        width: 50, height: 45,
+        displayName: "Red LED",
+        category: "indicator",
+    },
+    potentiometer: {
+        color: "#8B5E3C",
+        gradient: ["#A77450", "#6B4226"],
+        icon: "🎛️",
+        width: 70, height: 55,
+        displayName: "Potentiometer",
+        category: "input",
+    },
+    bme280: {
+        color: "#6A5ACD",
+        gradient: ["#7B6BE0", "#5445AA"],
+        icon: "🌡️",
+        width: 80, height: 55,
+        displayName: "BME280",
+        category: "sensor",
+    },
+    oled_128x64: {
+        color: "#1C1C2E",
+        gradient: ["#2A2A44", "#0E0E1A"],
+        icon: "🖥️",
+        width: 90, height: 60,
+        displayName: "OLED Display",
+        category: "display",
+    },
+    ldr_sensor: {
+        color: "#DAA520",
+        gradient: ["#F0C040", "#B8880A"],
+        icon: "☀️",
+        width: 65, height: 50,
+        displayName: "LDR Sensor",
+        category: "sensor",
+    },
+    dht11: {
+        color: "#4A90D9",
+        gradient: ["#5CA0E9", "#3070B9"],
+        icon: "🌧️",
+        width: 75, height: 55,
+        displayName: "DHT11",
+        category: "sensor",
+    },
+    buzzer: {
+        color: "#2C2C2C",
+        gradient: ["#444444", "#1A1A1A"],
+        icon: "🔊",
+        width: 55, height: 50,
+        displayName: "Buzzer",
+        category: "actuator",
+    },
+    push_button: {
+        color: "#CD5C5C",
+        gradient: ["#E06C6C", "#AA3C3C"],
+        icon: "🔘",
+        width: 50, height: 45,
+        displayName: "Button",
+        category: "input",
+    },
+    relay_module: {
+        color: "#2F4F4F",
+        gradient: ["#3D6565", "#1F3535"],
+        icon: "⚡",
+        width: 80, height: 55,
+        displayName: "Relay",
+        category: "actuator",
+    },
 };
 
-const COMPONENT_SIZES: Record<string, { w: number; h: number }> = {
-    ir_sensor: { w: 70, h: 45 },
-    hc_sr04_ultrasonic: { w: 90, h: 45 },
-    l298n_motor_driver: { w: 100, h: 60 },
-    dc_motor: { w: 60, h: 50 },
-    sg90_servo: { w: 70, h: 50 },
-    led_red: { w: 40, h: 40 },
-};
+// ═══════════════════════════════════════════════════════════════
+//  COMPONENT VISUAL BUILDER
+// ═══════════════════════════════════════════════════════════════
+
+export { BOARD_X, BOARD_Y, BOARD_WIDTH, BOARD_HEIGHT };
+
+export function getComponentMeta(type: string): ComponentMeta {
+    return COMPONENT_META[type] || {
+        color: "#6C757D",
+        gradient: ["#7D8E9D", "#4C5D6D"],
+        icon: "❓",
+        width: 70, height: 50,
+        displayName: type,
+        category: "sensor" as const,
+    };
+}
 
 export function buildComponentVisuals(
     pinMapping: Record<string, string>
@@ -85,35 +210,35 @@ export function buildComponentVisuals(
 
     // Collect unique component instances
     for (const key of Object.keys(pinMapping)) {
-        const instance = key.split(".")[0]; // "ir_sensor_0"
+        const instance = key.split(".")[0];
         instanceSet.add(instance);
     }
 
     const instances = Array.from(instanceSet);
-    const startX = 520;
-    const startY = 80;
-    const spacing = 100;
+    const startX = 530;
+    const startY = 60;
+    const colSpacing = 170;
+    const rowSpacing = 110;
 
     instances.forEach((instance, idx) => {
-        const type = instance.replace(/_\d+$/, ""); // "ir_sensor"
-        const size = COMPONENT_SIZES[type] || { w: 70, h: 45 };
-        const color = COMPONENT_COLORS[type] || COMPONENT_COLORS.default;
+        const type = instance.replace(/_\d+$/, "");
+        const meta = getComponentMeta(type);
 
-        // Position components in a column to the right of the board
+        // Position components in a grid to the right of the board
         const col = Math.floor(idx / 4);
         const row = idx % 4;
-        const x = startX + col * 160;
-        const y = startY + row * spacing;
+        const x = startX + col * colSpacing;
+        const y = startY + row * rowSpacing;
 
         // Collect pins for this instance
         const pins: PinCoordinate[] = [];
-        for (const [key, boardPin] of Object.entries(pinMapping)) {
+        for (const [key] of Object.entries(pinMapping)) {
             if (!key.startsWith(instance + ".")) continue;
             const pinName = key.split(".")[1];
             const pinIdx = pins.length;
             pins.push({
-                x: x - 10,
-                y: y + 12 + pinIdx * 14,
+                x: x - 12,
+                y: y + 18 + pinIdx * 16,
                 label: pinName,
                 side: "left",
             });
@@ -124,9 +249,9 @@ export function buildComponentVisuals(
             displayName: formatDisplayName(type, instance),
             x,
             y,
-            width: size.w,
-            height: Math.max(size.h, pins.length * 14 + 24),
-            color,
+            width: meta.width,
+            height: Math.max(meta.height, pins.length * 16 + 30),
+            color: meta.color,
             pins,
         });
     });
@@ -135,22 +260,34 @@ export function buildComponentVisuals(
 }
 
 function formatDisplayName(type: string, instance: string): string {
-    const names: Record<string, string> = {
-        ir_sensor: "IR Sensor",
-        hc_sr04_ultrasonic: "HC-SR04",
-        l298n_motor_driver: "L298N Driver",
-        dc_motor: "DC Motor",
-        sg90_servo: "SG90 Servo",
-        led_red: "Red LED",
-    };
+    const meta = COMPONENT_META[type];
     const idx = instance.split("_").pop();
-    return `${names[type] || type} #${idx}`;
+    const name = meta?.displayName || type;
+    return `${name} #${idx}`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  WIRE COLORS — Vibrant, physics-accurate color coding
+// ═══════════════════════════════════════════════════════════════
+
 export function getWireColor(pinName: string): string {
-    if (pinName === "VCC" || pinName === "5V") return "#E63946";
-    if (pinName === "GND" || pinName === "CATHODE") return "#1D3557";
-    if (pinName === "SIGNAL" || pinName === "ENA" || pinName === "ENB")
-        return "#F4A261";
-    return "#2A9D8F";
+    const upper = pinName.toUpperCase();
+    if (upper === "VCC" || upper === "5V") return "#FF4444";         // Bright red — power
+    if (upper === "GND" || upper === "CATHODE") return "#555555";    // Dark grey — ground
+    if (upper === "SIGNAL" || upper === "ENA" || upper === "ENB")
+        return "#FF8800";                                             // Vibrant orange — PWM/signal
+    if (upper === "SDA") return "#00DD88";                           // Cyan-green — I2C data
+    if (upper === "SCL") return "#00AAFF";                           // Bright blue — I2C clock
+    if (upper === "TRIG") return "#FFD700";                          // Gold — trigger
+    if (upper === "ECHO") return "#7B68EE";                          // Purple — echo return
+    if (upper === "DATA") return "#FF69B4";                          // Pink — data line
+    if (upper === "ANODE") return "#FF6600";                         // Orange — LED anode
+    return "#44AAFF";                                                 // Default blue — digital
+}
+
+export function getWireGlow(pinName: string): string {
+    const upper = pinName.toUpperCase();
+    if (upper === "VCC" || upper === "5V") return "rgba(255,68,68,0.4)";
+    if (upper === "GND" || upper === "CATHODE") return "rgba(85,85,85,0.3)";
+    return "rgba(68,170,255,0.3)";
 }
