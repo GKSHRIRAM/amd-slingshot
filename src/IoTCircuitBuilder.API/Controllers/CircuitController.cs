@@ -25,14 +25,34 @@ public class CircuitController : ControllerBase
     [ProducesResponseType(typeof(GenerateCircuitResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GenerateCircuit([FromBody] GenerateCircuitRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Prompt))
+        // ✅ SECURITY FIX: Input validation with strict limits
+        const int maxPromptLength = 5000;
+        const int minPromptLength = 5;
+
+        if (request == null || string.IsNullOrWhiteSpace(request.Prompt))
         {
             return BadRequest(GenerateCircuitResponse.Fail("Prompt cannot be empty."));
         }
 
-        _logger.LogInformation("Received circuit generation request: {Prompt}", request.Prompt);
+        if (request.Prompt.Length < minPromptLength)
+        {
+            return BadRequest(GenerateCircuitResponse.Fail($"Prompt must be at least {minPromptLength} characters."));
+        }
 
-        var result = await _circuitService.GenerateCircuitAsync(request.Prompt);
+        if (request.Prompt.Length > maxPromptLength)
+        {
+            return BadRequest(GenerateCircuitResponse.Fail($"Prompt cannot exceed {maxPromptLength} characters."));
+        }
+
+        // ✅ SECURITY FIX: Sanitize input to prevent injection
+        var sanitizedPrompt = System.Net.WebUtility.HtmlEncode(request.Prompt.Trim());
+
+        // ✅ SECURITY FIX: Safe logging without sensitive data
+        _logger.LogInformation("Received circuit generation request (length: {PromptLength} chars, timestamp: {Timestamp})",
+            sanitizedPrompt.Length,
+            DateTime.UtcNow);
+
+        var result = await _circuitService.GenerateCircuitAsync(sanitizedPrompt);
 
         if (!result.Success)
         {

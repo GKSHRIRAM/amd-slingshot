@@ -98,7 +98,7 @@ interface ComponentMeta {
     width: number;
     height: number;
     displayName: string;
-    category: "sensor" | "actuator" | "driver" | "input" | "indicator" | "display";
+    category: "sensor" | "actuator" | "driver" | "input" | "indicator" | "display" | "power" | "passive";
 }
 
 const COMPONENT_META: Record<string, ComponentMeta> = {
@@ -106,7 +106,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#FF6B35",
         gradient: ["#FF8855", "#CC4411"],
         icon: "📡",
-        width: 150, height: 100,
+        width: 225, height: 150,
         displayName: "IR Sensor",
         category: "sensor",
     },
@@ -114,7 +114,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#4ECDC4",
         gradient: ["#5FE0D7", "#2BA89F"],
         icon: "📏",
-        width: 170, height: 100,
+        width: 255, height: 150,
         displayName: "HC-SR04",
         category: "sensor",
     },
@@ -122,7 +122,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#E63946",
         gradient: ["#FF4D5A", "#B8202D"],
         icon: "⚙️",
-        width: 190, height: 130,
+        width: 285, height: 195,
         displayName: "L298N Driver",
         category: "driver",
     },
@@ -130,7 +130,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#457B9D",
         gradient: ["#5A8FAF", "#2D5F7D"],
         icon: "🔄",
-        width: 140, height: 110,
+        width: 210, height: 165,
         displayName: "DC Motor",
         category: "actuator",
     },
@@ -138,7 +138,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#2A9D8F",
         gradient: ["#35B8A8", "#1E7A6F"],
         icon: "🦾",
-        width: 150, height: 100,
+        width: 225, height: 150,
         displayName: "SG90 Servo",
         category: "actuator",
     },
@@ -146,7 +146,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#E76F51",
         gradient: ["#FF8866", "#CC4433"],
         icon: "💡",
-        width: 100, height: 90,
+        width: 150, height: 135,
         displayName: "Red LED",
         category: "indicator",
     },
@@ -154,7 +154,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#8B5E3C",
         gradient: ["#A77450", "#6B4226"],
         icon: "🎛️",
-        width: 140, height: 100,
+        width: 210, height: 150,
         displayName: "Potentiometer",
         category: "input",
     },
@@ -162,7 +162,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#6A5ACD",
         gradient: ["#7B6BE0", "#5445AA"],
         icon: "🌡️",
-        width: 150, height: 100,
+        width: 225, height: 150,
         displayName: "BME280",
         category: "sensor",
     },
@@ -170,7 +170,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#1C1C2E",
         gradient: ["#2A2A44", "#0E0E1A"],
         icon: "🖥️",
-        width: 160, height: 110,
+        width: 240, height: 165,
         displayName: "OLED Display",
         category: "display",
     },
@@ -178,7 +178,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#DAA520",
         gradient: ["#F0C040", "#B8880A"],
         icon: "☀️",
-        width: 120, height: 90,
+        width: 180, height: 135,
         displayName: "LDR Sensor",
         category: "sensor",
     },
@@ -186,7 +186,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#4A90D9",
         gradient: ["#5CA0E9", "#3070B9"],
         icon: "🌧️",
-        width: 140, height: 100,
+        width: 210, height: 150,
         displayName: "DHT11",
         category: "sensor",
     },
@@ -194,7 +194,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#2C2C2C",
         gradient: ["#444444", "#1A1A1A"],
         icon: "🔊",
-        width: 110, height: 90,
+        width: 165, height: 135,
         displayName: "Buzzer",
         category: "actuator",
     },
@@ -202,7 +202,7 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#CD5C5C",
         gradient: ["#E06C6C", "#AA3C3C"],
         icon: "🔘",
-        width: 100, height: 90,
+        width: 150, height: 135,
         displayName: "Button",
         category: "input",
     },
@@ -210,9 +210,49 @@ const COMPONENT_META: Record<string, ComponentMeta> = {
         color: "#2F4F4F",
         gradient: ["#3D6565", "#1F3535"],
         icon: "⚡",
-        width: 150, height: 100,
+        width: 225, height: 150,
         displayName: "Relay",
         category: "actuator",
+    },
+    battery_9v: {
+        color: "#333333",
+        gradient: ["#555555", "#111111"],
+        icon: "🔋",
+        width: 195, height: 270,
+        displayName: "9V Battery",
+        category: "power",
+    },
+    resistor: {
+        color: "#D2B48C",
+        gradient: ["#E6C2A0", "#BEA382"],
+        icon: "〰️",
+        width: 135, height: 45,
+        displayName: "Resistor",
+        category: "passive",
+    },
+    diode: {
+        color: "#222222",
+        gradient: ["#444444", "#111111"],
+        icon: "⏭️",
+        width: 135, height: 45,
+        displayName: "Diode",
+        category: "passive",
+    },
+    capacitor_ceramic: {
+        color: "#D2691E",
+        gradient: ["#E67E22", "#B85C19"],
+        icon: "🟡",
+        width: 90, height: 90,
+        displayName: "Ceramic Cap",
+        category: "passive",
+    },
+    capacitor_electrolytic: {
+        color: "#1A1A1A",
+        gradient: ["#333333", "#0D0D0D"],
+        icon: "🛢️",
+        width: 105, height: 135,
+        displayName: "Electrolytic Cap",
+        category: "passive",
     },
 };
 
@@ -227,7 +267,7 @@ export function getComponentMeta(type: string): ComponentMeta {
         color: "#6C757D",
         gradient: ["#7D8E9D", "#4C5D6D"],
         icon: "❓",
-        width: 140, height: 100,
+        width: 210, height: 150,
         displayName: type,
         category: "sensor" as const,
     };
@@ -249,8 +289,8 @@ export function buildComponentVisuals(
     const instances = Array.from(instanceSet);
     const startX = 760;
     const startY = 80;
-    const colSpacing = 240;
-    const rowSpacing = 160;
+    const colSpacing = 360;
+    const rowSpacing = 240;
 
     instances.forEach((instance, idx) => {
         const type = instance.replace(/_\d+$/, "");

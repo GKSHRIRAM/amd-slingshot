@@ -34,7 +34,7 @@ public class ConstraintSolver : IConstraintSolver
         _logger = logger;
     }
 
-    public Task<SolverResult> SolveAsync(Board board, List<Component> components)
+    public Task<SolverResult> SolveAsync(Board board, List<Component> components, Dictionary<string, string>? preAssignedPins = null)
     {
         _backtrackCount = 0;
 
@@ -54,9 +54,9 @@ public class ConstraintSolver : IConstraintSolver
         var voltageCheck = ValidateVoltageCompatibility(board, components);
         if (voltageCheck != null) return Task.FromResult(voltageCheck);
 
-        // Collect all pin requirements
-        var requirements = CollectRequirements(components);
-        _logger.LogInformation("Collected {RequirementCount} pin requirements", requirements.Count);
+        // Collect all pin requirements (Skipping those already pre-assigned by the Dependency Service)
+        var requirements = CollectRequirements(components, preAssignedPins);
+        _logger.LogInformation("Collected {RequirementCount} pin requirements to route to Arduino", requirements.Count);
 
         // Check 3: Pin Availability by Type (excluding blacklisted)
         var pinCheck = ValidatePinAvailability(board, requirements, blacklistedPins);
@@ -67,10 +67,20 @@ public class ConstraintSolver : IConstraintSolver
 
         // ─── BACKTRACKING CSP ────────────────────────────────────
         var sortedReqs = requirements
-            .OrderBy(r => CountAvailablePins(board, r.RequiredCapability, blacklistedPins))
+            .OrderBy(r => GetRoutingPriority(r.RequiredCapability))
+            .ThenBy(r => CountAvailablePins(board, r.RequiredCapability, blacklistedPins))
             .ToList();
 
+        // Seed assignment with pre-assigned pins (e.g. topological component-to-component rules)
         var assignment = new Dictionary<string, string>();
+        if (preAssignedPins != null)
+        {
+            foreach (var kvp in preAssignedPins)
+            {
+                assignment[kvp.Key] = kvp.Value;
+            }
+        }
+        
         var usedPins = new HashSet<int>();
 
         _logger.LogInformation("Starting backtracking with {Count} sorted requirements", sortedReqs.Count);
@@ -183,10 +193,13 @@ public class ConstraintSolver : IConstraintSolver
     {
         foreach (var comp in components)
         {
-            if (board.Voltage < comp.VoltageMin || board.Voltage > comp.VoltageMax)
-            {
-                if (comp.RequiresExternalPower) continue;
+            // Skip voltage validations for power supplies and passive components (resistors, diodes)
+            if (comp.Category == "power" || comp.Category == "passive")
+                continue;
 
+            // 1. Physical Power compatibility
+            if (!comp.RequiresExternalPower && (board.Voltage < comp.VoltageMin || board.Voltage > comp.VoltageMax))
+            {
                 return SolverResult.Failed(
                     $"⚠️ VOLTAGE INCOMPATIBILITY\n\n" +
                     $"{comp.DisplayName ?? comp.Type} requires {comp.VoltageMin}V - {comp.VoltageMax}V.\n" +
@@ -195,6 +208,21 @@ public class ConstraintSolver : IConstraintSolver
                     $"1. Use a level shifter\n" +
                     $"2. Use a voltage regulator\n" +
                     $"3. Choose a compatible board");
+            }
+
+            // 2. Logic Level Signal compatibility (e.g., 5V Uno vs 3.3V Sensor)
+            // Even if powered correctly, a 5V signal on a 3.3V GPIO will fry most sensors.
+            if (board.LogicLevelV > comp.VoltageMax)
+            {
+                return SolverResult.Failed(
+                    $"⚠️ LOGIC LEVEL CONFLICT\n\n" +
+                    $"{comp.DisplayName ?? comp.Type} has a maximum tolerated voltage of {comp.VoltageMax}V.\n" +
+                    $"The {board.DisplayName ?? board.Name} uses {board.LogicLevelV}V logic signals.\n" +
+                    $"Connecting {board.LogicLevelV}V signals directly to this component will likely damage it.\n\n" +
+                    $"💡 SOLUTIONS:\n" +
+                    $"1. Use a Logic Level Shifter (e.g., TXB0104)\n" +
+                    $"2. Switch to a 3.3V board (ESP32, Raspberry Pi Pico)\n" +
+                    $"3. Use a resistors-based voltage divider for simple inputs (Slow)");
             }
         }
 
@@ -206,6 +234,7 @@ public class ConstraintSolver : IConstraintSolver
         var reqGroups = requirements
             .Where(r => r.RequiredCapability != PinCapabilityType.Power5V &&
                         r.RequiredCapability != PinCapabilityType.Power3V3 &&
+                        r.RequiredCapability != PinCapabilityType.PowerVin &&
                         r.RequiredCapability != PinCapabilityType.Ground)
             .GroupBy(r => r.RequiredCapability);
 
@@ -321,6 +350,7 @@ public class ConstraintSolver : IConstraintSolver
         // and are differentiated by address, not by pin.
         if (req.RequiredCapability == PinCapabilityType.Power5V ||
             req.RequiredCapability == PinCapabilityType.Power3V3 ||
+            req.RequiredCapability == PinCapabilityType.PowerVin ||
             req.RequiredCapability == PinCapabilityType.Ground ||
             req.RequiredCapability == PinCapabilityType.I2cSda ||
             req.RequiredCapability == PinCapabilityType.I2cScl)
@@ -368,7 +398,7 @@ public class ConstraintSolver : IConstraintSolver
     //  HELPERS
     // ═══════════════════════════════════════════════════════════════
 
-    private List<PinRequirementEntry> CollectRequirements(List<Component> components)
+    private List<PinRequirementEntry> CollectRequirements(List<Component> components, Dictionary<string, string>? preAssignedPins)
     {
         var entries = new List<PinRequirementEntry>();
         var typeCounts = new Dictionary<string, int>();
@@ -381,6 +411,12 @@ public class ConstraintSolver : IConstraintSolver
 
             foreach (var req in comp.PinRequirements)
             {
+                string pinKey = $"{label}.{req.PinName}";
+                
+                // Rule 4: If this pin was explicitly assigned topologically by the Dependency Service, skip Uno routing.
+                if (preAssignedPins != null && preAssignedPins.ContainsKey(pinKey))
+                    continue;
+
                 entries.Add(new PinRequirementEntry
                 {
                     ComponentLabel = label,
@@ -399,6 +435,25 @@ public class ConstraintSolver : IConstraintSolver
         return board.Pins.Count(p =>
             !blacklist.Contains(p.PinIdentifier) &&
             p.Capabilities.Any(c => c.CapabilityType == capType));
+    }
+
+    private int GetRoutingPriority(PinCapabilityType cap)
+    {
+        // Tier 1: Hardcoded Protocol Pins (Must go first)
+        if (cap == PinCapabilityType.I2cSda || cap == PinCapabilityType.I2cScl || 
+            cap == PinCapabilityType.SpiMosi || cap == PinCapabilityType.SpiMiso || cap == PinCapabilityType.SpiSck)
+            return 1;
+        
+        // Tier 2: Scarce Hardware Pins
+        if (cap == PinCapabilityType.Pwm)
+            return 2;
+        
+        // Tier 3: Semi-flexible Pins
+        if (cap == PinCapabilityType.Analog)
+            return 3;
+        
+        // Tier 4: Trash Pins (Generic Digital - can go anywhere)
+        return 4;
     }
 
     private class PinRequirementEntry

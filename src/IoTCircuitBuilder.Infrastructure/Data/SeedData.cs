@@ -54,7 +54,8 @@ public static class SeedData
                 PinIdentifier = $"D{i}",
                 PhysicalPosition = i,
                 Voltage = 5.0m,
-                MaxCurrentMa = 40
+                MaxCurrentMa = 40,
+                BaseErcType = ErcPinType.Bidirectional
             });
         }
 
@@ -68,14 +69,16 @@ public static class SeedData
                 PinIdentifier = $"A{i}",
                 PhysicalPosition = 14 + i,
                 Voltage = 5.0m,
-                MaxCurrentMa = 40
+                MaxCurrentMa = 40,
+                BaseErcType = ErcPinType.Input
             });
         }
 
         // Power pins
-        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "5V",  PhysicalPosition = 100, Voltage = 5.0m,  MaxCurrentMa = 500 });
-        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "3V3", PhysicalPosition = 101, Voltage = 3.3m,  MaxCurrentMa = 50   });
-        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "GND", PhysicalPosition = 102, Voltage = 0m,    MaxCurrentMa = 1000  });
+        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "5V",  PhysicalPosition = 100, Voltage = 5.0m,  MaxCurrentMa = 500, BaseErcType = ErcPinType.PowerOut });
+        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "3V3", PhysicalPosition = 101, Voltage = 3.3m,  MaxCurrentMa = 50,  BaseErcType = ErcPinType.PowerOut });
+        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "GND", PhysicalPosition = 102, Voltage = 0m,    MaxCurrentMa = 1000, BaseErcType = ErcPinType.PowerOut });
+        pins.Add(new Pin { PinId = id++, BoardId = 1, PinIdentifier = "VIN", PhysicalPosition = 103, Voltage = 12.0m, MaxCurrentMa = 1000, BaseErcType = ErcPinType.PowerIn });
 
         mb.Entity<Pin>().HasData(pins);
     }
@@ -123,6 +126,7 @@ public static class SeedData
         caps.Add(new PinCapability { CapabilityId = id++, PinId = 21, CapabilityType = PinCapabilityType.Power5V });   // 5V
         caps.Add(new PinCapability { CapabilityId = id++, PinId = 22, CapabilityType = PinCapabilityType.Power3V3 });  // 3V3
         caps.Add(new PinCapability { CapabilityId = id++, PinId = 23, CapabilityType = PinCapabilityType.Ground });    // GND
+        caps.Add(new PinCapability { CapabilityId = id++, PinId = 24, CapabilityType = PinCapabilityType.PowerVin });  // VIN
 
         mb.Entity<PinCapability>().HasData(caps);
     }
@@ -228,6 +232,49 @@ public static class SeedData
                 Category = "actuator", CurrentDrawMa = 75, VoltageMin = 5.0m, VoltageMax = 5.0m,
                 RequiresExternalPower = false, InterfaceProtocol = "digital",
                 IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            // ─── PASSIVE & POWER COMPONENTS ──────────────────────
+            new Component
+            {
+                ComponentId = 15, Type = "battery_9v", DisplayName = "9V Battery",
+                Category = "power", CurrentDrawMa = 0, VoltageMin = 9.0m, VoltageMax = 9.0m,
+                RequiresExternalPower = false, InterfaceProtocol = "power",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 16, Type = "resistor", DisplayName = "Resistor (Inline)",
+                Category = "passive", CurrentDrawMa = 0, VoltageMin = 0m, VoltageMax = 100m,
+                RequiresExternalPower = false, InterfaceProtocol = "analog",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 17, Type = "diode", DisplayName = "Diode (1N4001)",
+                Category = "passive", CurrentDrawMa = 0, VoltageMin = 0m, VoltageMax = 100m,
+                RequiresExternalPower = false, InterfaceProtocol = "analog",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 18, Type = "capacitor_ceramic", DisplayName = "Ceramic Capacitor (100nF)",
+                Category = "passive", CurrentDrawMa = 0, VoltageMin = 0m, VoltageMax = 50m,
+                RequiresExternalPower = false, InterfaceProtocol = "analog",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 19, Type = "capacitor_electrolytic", DisplayName = "Electrolytic Capacitor (10uF)",
+                Category = "passive", CurrentDrawMa = 0, VoltageMin = 0m, VoltageMax = 50m,
+                RequiresExternalPower = false, InterfaceProtocol = "analog",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 20, Type = "breadboard_half", DisplayName = "Breadboard (Half-Size)",
+                Category = "hardware", CurrentDrawMa = 0, VoltageMin = 0m, VoltageMax = 50m,
+                RequiresExternalPower = false, InterfaceProtocol = "none",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
     }
@@ -237,77 +284,104 @@ public static class SeedData
         var reqs = new List<ComponentPinRequirement>();
         int id = 1;
 
-        // IR Sensor (ComponentId=1): OUT, VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 1, PinName = "OUT", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 1, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 1, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // IR Sensor (ComponentId=1): OUT(Output), VCC(PowerIn), GND(PowerIn)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 1, PinName = "OUT", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 1, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 1, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // HC-SR04 (ComponentId=2): TRIG, ECHO, VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "TRIG", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "ECHO", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // HC-SR04 (ComponentId=2): TRIG(Input), ECHO(Output), VCC, GND
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "TRIG", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "ECHO", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 2, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // L298N (ComponentId=3): ENA(PWM), IN1-IN4(Digital), ENB(PWM)
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "ENA", RequiredCapability = PinCapabilityType.Pwm });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN1", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN2", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "ENB", RequiredCapability = PinCapabilityType.Pwm });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN3", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN4", RequiredCapability = PinCapabilityType.Digital });
+        // L298N (ComponentId=3): Full Pinout for Wokwi Custom Chip
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "12V", RequiredCapability = PinCapabilityType.PowerVin, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "5V", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "ENA", RequiredCapability = PinCapabilityType.Pwm, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN1", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN2", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "ENB", RequiredCapability = PinCapabilityType.Pwm, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN3", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "IN4", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "OUT1", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "OUT2", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "OUT3", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 3, PinName = "OUT4", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Output });
 
-        // DC Motor (ComponentId=4): No direct pin requirements (connects to L298N driver)
+        // SG90 Servo (ComponentId=5): SIGNAL(Input)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 5, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Pwm, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 5, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 5, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // SG90 Servo (ComponentId=5): SIGNAL(PWM), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 5, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Pwm });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 5, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 5, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
-
-        // LED (ComponentId=6): ANODE(Digital), CATHODE(GND)
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 6, PinName = "ANODE", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 6, PinName = "CATHODE", RequiredCapability = PinCapabilityType.Ground });
+        // LED (ComponentId=6): ANODE(Input), CATHODE(PowerIn/Gnd)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 6, PinName = "ANODE", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 6, PinName = "CATHODE", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
         // ─── NEW COMPONENT PIN REQUIREMENTS ──────────────────────
 
-        // Potentiometer (ComponentId=7): SIGNAL(Analog), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 7, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Analog });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 7, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 7, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // Potentiometer (ComponentId=7): SIGNAL(Output)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 7, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 7, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 7, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // BME280 (ComponentId=8): SDA(I2C), SCL(I2C), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "SDA", RequiredCapability = PinCapabilityType.I2cSda });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "SCL", RequiredCapability = PinCapabilityType.I2cScl });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // BME280 (ComponentId=8): SDA/SCL(Bidirectional)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "SDA", RequiredCapability = PinCapabilityType.I2cSda, ErcType = ErcPinType.Bidirectional });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "SCL", RequiredCapability = PinCapabilityType.I2cScl, ErcType = ErcPinType.Bidirectional });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 8, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // OLED SSD1306 (ComponentId=9): SDA(I2C), SCL(I2C), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "SDA", RequiredCapability = PinCapabilityType.I2cSda });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "SCL", RequiredCapability = PinCapabilityType.I2cScl });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // OLED SSD1306 (ComponentId=9): SDA/SCL(Bidirectional)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "SDA", RequiredCapability = PinCapabilityType.I2cSda, ErcType = ErcPinType.Bidirectional });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "SCL", RequiredCapability = PinCapabilityType.I2cScl, ErcType = ErcPinType.Bidirectional });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 9, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // LDR Light Sensor (ComponentId=10): SIGNAL(Analog), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 10, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Analog });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 10, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 10, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // LDR Light Sensor (ComponentId=10): SIGNAL(Output)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 10, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 10, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 10, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // DHT11 (ComponentId=11): DATA(Digital), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 11, PinName = "DATA", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 11, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 11, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // DHT11 (ComponentId=11): DATA(Bidirectional)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 11, PinName = "DATA", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Bidirectional });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 11, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 11, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // Buzzer (ComponentId=12): SIGNAL(Digital), GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 12, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 12, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // Buzzer (ComponentId=12): SIGNAL(Input)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 12, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 12, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // Push Button (ComponentId=13): SIGNAL(Digital), GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 13, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 13, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // Push Button (ComponentId=13): SIGNAL(Output)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 13, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 13, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
 
-        // Relay Module (ComponentId=14): SIGNAL(Digital), VCC, GND
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 14, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Digital });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 14, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V });
-        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 14, PinName = "GND", RequiredCapability = PinCapabilityType.Ground });
+        // Relay Module (ComponentId=14): SIGNAL(Input)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 14, PinName = "SIGNAL", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 14, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 14, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
+
+        // ─── PASSIVE COMPONENT PIN REQUIREMENTS ──────────────────────
+
+        // 9V Battery (ComponentId=15): VCC(PowerOut), GND(PowerOut)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 15, PinName = "VCC", RequiredCapability = PinCapabilityType.PowerVin, ErcType = ErcPinType.PowerOut });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 15, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerOut });
+
+        // Resistor (ComponentId=16): PIN1, PIN2 (Passive)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 16, PinName = "PIN1", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 16, PinName = "PIN2", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+
+        // Diode (ComponentId=17): ANODE, CATHODE (Passive)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 17, PinName = "ANODE", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 17, PinName = "CATHODE", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+
+        // Ceramic Capacitor (ComponentId=18): PIN1, PIN2 (Passive)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 18, PinName = "PIN1", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 18, PinName = "PIN2", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+
+        // Electrolytic Capacitor (ComponentId=19): ANODE, CATHODE (Passive)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 19, PinName = "ANODE", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 19, PinName = "CATHODE", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.Passive });
 
         mb.Entity<ComponentPinRequirement>().HasData(reqs);
     }

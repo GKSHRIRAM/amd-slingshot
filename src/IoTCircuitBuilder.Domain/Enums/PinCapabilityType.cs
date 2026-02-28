@@ -14,5 +14,6 @@ public enum PinCapabilityType
     UartRx,
     Power5V,
     Power3V3,
+    PowerVin,
     Ground
 }

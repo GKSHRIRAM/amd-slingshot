@@ -3,6 +3,7 @@ using IoTCircuitBuilder.Infrastructure.Data;
 using IoTCircuitBuilder.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Linq;
 
 namespace IoTCircuitBuilder.Infrastructure.Repositories;
 
@@ -52,11 +53,23 @@ public class ComponentRepository : IComponentRepository
 
     public async Task<bool> CheckI2cConflictsAsync(List<int> componentIds)
     {
+        // Fetch all addresses for the requested instances
         var addresses = await _db.I2cAddresses
             .Where(i => componentIds.Contains(i.ComponentId))
-            .Select(i => i.DefaultAddress)
             .ToListAsync();
 
-        return addresses.Count != addresses.Distinct().Count();
+        // Map componentId -> DefaultAddress
+        // We need to count occurrences of each address based on how many times that componentId appears in the input list
+        var addressList = new List<string>();
+        foreach (var id in componentIds)
+        {
+            var compAddress = addresses.FirstOrDefault(a => a.ComponentId == id)?.DefaultAddress;
+            if (!string.IsNullOrEmpty(compAddress))
+            {
+                addressList.Add(compAddress);
+            }
+        }
+
+        return addressList.Count != addressList.Distinct().Count();
     }
 }

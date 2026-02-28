@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,14 @@ export const metadata: Metadata = {
   description:
     "AI-powered IoT circuit design tool. Describe your project in plain English and get validated Arduino code with circuit diagrams.",
   keywords: ["IoT", "Arduino", "Circuit Builder", "AMD", "Hackathon"],
+};
+
+// Mobile viewport configuration
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({

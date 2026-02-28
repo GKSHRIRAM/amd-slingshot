@@ -1,3 +1,5 @@
+using IoTCircuitBuilder.Domain.Enums;
+
 namespace IoTCircuitBuilder.Domain.Entities;
 
 public class Pin
@@ -8,6 +10,9 @@ public class Pin
     public int? PhysicalPosition { get; set; }
     public decimal Voltage { get; set; }
     public int MaxCurrentMa { get; set; }
+
+    // Electrical Identity for ERC Checking
+    public ErcPinType BaseErcType { get; set; } = ErcPinType.Unspecified;
 
     // Navigation
     public Board Board { get; set; } = null!;

@@ -117,6 +117,47 @@ public class PinMappingValidator
             _logger.LogError(msg);
         }
 
+        // CHECK 6: Electrical Rules Checking (ERC)
+        foreach (var kvp in mapping)
+        {
+            var parts = kvp.Key.Split('.');
+            if (parts.Length != 2) continue;
+
+            var compLabel = parts[0];
+            var pinName = parts[1];
+
+            var comp = components.FirstOrDefault(c => compLabel.StartsWith(c.Type, StringComparison.OrdinalIgnoreCase));
+            var boardPin = board.Pins.FirstOrDefault(p => p.PinIdentifier == kvp.Value);
+
+            if (comp != null && boardPin != null)
+            {
+                var req = comp.PinRequirements.FirstOrDefault(r => r.PinName.Equals(pinName, StringComparison.OrdinalIgnoreCase));
+
+                if (req != null)
+                {
+                    // THE GROUND EXEMPTION: GND can ALWAYS connect to GND
+                    if (boardPin.PinIdentifier == "GND" && req.RequiredCapability == PinCapabilityType.Ground)
+                    {
+                        continue; // Safe to connect!
+                    }
+
+                    var ercStatus = ErcCollisionMatrix.CheckConnection(boardPin.BaseErcType, req.ErcType);
+                    
+                    if (ercStatus == ErcConnectionStatus.Error)
+                    {
+                        var msg = $"ERC FATAL: Electrical short prevented! Cannot connect {boardPin.BaseErcType} ({kvp.Value}) to {req.ErcType} ({kvp.Key}).";
+                        errors.Add(msg);
+                        _logger.LogError(msg);
+                    }
+                    else if (ercStatus == ErcConnectionStatus.Warning)
+                    {
+                        _logger.LogWarning("ERC WARNING: Sub-optimal connection {BoardErc} ({BoardPin}) to {ReqErc} ({ReqPin}).", 
+                            boardPin.BaseErcType, kvp.Value, req.ErcType, kvp.Key);
+                    }
+                }
+            }
+        }
+
         if (errors.Count > 0)
         {
             _logger.LogError("Post-solve validation FAILED with {ErrorCount} errors", errors.Count);

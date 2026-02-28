@@ -5,5 +5,5 @@ namespace IoTCircuitBuilder.Core.Interfaces;
 
 public interface IConstraintSolver
 {
-    Task<SolverResult> SolveAsync(Board board, List<Component> components);
+    Task<SolverResult> SolveAsync(Board board, List<Component> components, Dictionary<string, string>? preAssignedPins = null);
 }

@@ -13,8 +13,8 @@ import {
     buildArduinoPinsFromSvg,
     setArduinoPins,
 } from "@/lib/fritzing";
-import { RoutingGrid, findPath, type Point } from "@/lib/wireRouter";
 import { parseSvgConnectors, type SvgParseResult } from "@/lib/svgConnectorParser";
+import { OrthogonalRouter, type Point } from "@/lib/wireRouter";
 
 interface CircuitRendererProps {
     pinMapping: Record<string, string>;
@@ -49,6 +49,9 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
                 Array.from(instanceSet).map(inst => inst.replace(/_\d+$/, ""))
             ));
             const allTypes = ["arduino_uno", ...componentTypes];
+            if (needsBreadboard) {
+                allTypes.push("breadboard_full");
+            }
 
             // Parse SVGs for connector data + preload images — in parallel
             const parsePromise = Promise.all(
@@ -67,20 +70,11 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
             const imagePromise = preloadComponentImages(allTypes);
 
             Promise.all([parsePromise, imagePromise]).then(([svgParsedMap, imageMap]) => {
-                // ─── Build Arduino pins from SVG data ───────
-                const arduinoParsed = svgParsedMap.get("arduino_uno");
-                if (arduinoParsed) {
-                    const svgPins = buildArduinoPinsFromSvg(arduinoParsed);
-                    // Only use SVG pins if we got a reasonable number
-                    if (Object.keys(svgPins).length >= 10) {
-                        setArduinoPins(svgPins);
-                    }
-                }
-
                 // ─── Build component visuals with SVG connector data ──
                 const components = buildComponentVisuals(pinMapping, svgParsedMap);
 
-                const dpr = window.devicePixelRatio || 2;
+                // Force high-resolution internally (at least 3x scale) for crisp exports
+                const dpr = Math.max(window.devicePixelRatio || 1, 3);
                 canvas.width = CANVAS_W * dpr;
                 canvas.height = CANVAS_H * dpr;
                 ctx.scale(dpr, dpr);
@@ -91,27 +85,44 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
                 // ─── Background ─────────────────────────────
                 drawBackground(ctx);
 
-                // ─── Build routing grid & block obstacles ────
-                const grid = new RoutingGrid(CANVAS_W, CANVAS_H);
-                grid.blockRegion(BOARD_X, BOARD_Y, BOARD_WIDTH, BOARD_HEIGHT);
-                for (const comp of components) {
-                    grid.blockRegion(comp.x, comp.y, comp.width, comp.height);
+                // Initialize the professional Orthogonal A* Router
+                const router = new OrthogonalRouter(CANVAS_W, CANVAS_H);
+
+                // Block the Arduino as an unwalkable obstacle
+                const obstacles = [
+                    { x: BOARD_X, y: BOARD_Y, width: BOARD_WIDTH, height: BOARD_HEIGHT },
+                    ...components.map(c => ({ x: c.x, y: c.y, width: c.width, height: c.height }))
+                ];
+                router.blockObstacles(obstacles, 15);
+
+                // Unblock the exact pins we need to route to
+                for (const [key, boardPinId] of Object.entries(pinMapping)) {
+                    const boardPin = ARDUINO_UNO_PINS[boardPinId];
+                    if (boardPin) router.unblockPin(boardPin.x, boardPin.y);
+
+                    const [instance, pinName] = key.split(".");
+                    const compVisual = components.find((c) => c.instance === instance);
+                    if (!compVisual) continue;
+                    const compPin = compVisual.pins.find((p) => p.label === pinName);
+                    if (compPin) router.unblockPin(compPin.x, compPin.y);
                 }
-                for (const pin of Object.values(ARDUINO_UNO_PINS)) {
-                    grid.unblockCell(pin.x, pin.y);
-                }
-                for (const comp of components) {
-                    for (const pin of comp.pins) {
-                        grid.unblockCell(pin.x, pin.y);
-                    }
+
+                if (needsBreadboard) {
+                    const bbPoly = { x: BB_X, y: BB_Y, width: BB_W, height: BB_H };
+                    router.blockObstacles([bbPoly], 5);
                 }
 
                 // ─── 1. ROUTE & DRAW WIRES (behind everything) ──
-                drawRoutedWires(ctx, grid, pinMapping, components, needsBreadboard);
+                drawManhattanWires(ctx, pinMapping, components, needsBreadboard, router);
 
                 // ─── 2. DRAW BREADBOARD (if needed) ─────────
                 if (needsBreadboard) {
-                    drawBreadboard(ctx);
+                    const bbImg = imageMap.get("breadboard_full");
+                    if (bbImg) {
+                        drawBreadboardSVG(ctx, bbImg);
+                    } else {
+                        drawBreadboard(ctx);
+                    }
                 }
 
                 // ─── 3. DRAW ARDUINO BOARD ──────────────────
@@ -135,7 +146,7 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
         }, [pinMapping, needsBreadboard]);
 
         return (
-            <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0a0a1a]">
+            <div className="relative rounded-xl overflow-hidden border border-black/10 bg-white">
                 <canvas
                     ref={canvasRef}
                     width={CANVAS_W}
@@ -143,7 +154,9 @@ const CircuitRenderer = forwardRef<HTMLCanvasElement, CircuitRendererProps>(
                     style={{
                         width: "100%",
                         height: "auto",
-                        imageRendering: "crisp-edges" as const,
+                        imageRendering: "auto",
+                        WebkitFontSmoothing: "antialiased",
+                        MozOsxFontSmoothing: "grayscale"
                     }}
                     className="block"
                 />
@@ -175,24 +188,30 @@ function preloadComponentImages(types: string[]): Promise<Map<string, HTMLImageE
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  BACKGROUND
+//  BACKGROUND (Fritzing Light Style)
 // ═══════════════════════════════════════════════════════════════
 
 function drawBackground(ctx: CanvasRenderingContext2D) {
-    const bg = ctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, 50, CANVAS_W / 2, CANVAS_H / 2, CANVAS_W);
-    bg.addColorStop(0, "#151530");
-    bg.addColorStop(1, "#0a0a1a");
-    ctx.fillStyle = bg;
+    // Light neutral background
+    ctx.fillStyle = "#F8F9FA";
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Subtle dot grid
-    ctx.fillStyle = "rgba(255,255,255,0.02)";
-    for (let x = 0; x < CANVAS_W; x += 24) {
-        for (let y = 0; y < CANVAS_H; y += 24) {
-            ctx.beginPath();
-            ctx.arc(x, y, 1, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    // Subtle grid pattern
+    ctx.strokeStyle = "#E8EAED";
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x < CANVAS_W; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, CANVAS_H);
+        ctx.stroke();
+    }
+
+    for (let y = 0; y < CANVAS_H; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(CANVAS_W, y);
+        ctx.stroke();
     }
 }
 
@@ -265,13 +284,13 @@ function drawPinHeaders(ctx: CanvasRenderingContext2D) {
         ctx.fill();
 
         // Label
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
         ctx.font = isPwm ? "bold 10px monospace" : "10px monospace";
         ctx.textAlign = "center";
         if (pin.side === "top") {
             ctx.fillText(pin.label, pin.x, pin.y - 16);
             if (isPwm) {
-                ctx.fillStyle = "rgba(255,136,0,0.5)";
+                ctx.fillStyle = "rgba(255,136,0,0.8)";
                 ctx.font = "7px monospace";
                 ctx.fillText("~", pin.x + 16, pin.y - 14);
             }
@@ -293,29 +312,30 @@ function drawComponentClean(
     const { x, y, width, height } = comp;
     const meta = getComponentMeta(comp.type);
 
-    // Subtle shadow only
-    ctx.shadowColor = `${meta.color}33`;
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetY = 3;
+    // Component name label with background to prevent wire clipping
+    const labelY = y + height + 16;
+    ctx.font = "bold 11px 'Inter', 'Segoe UI', sans-serif";
+    const textMetrics = ctx.measureText(comp.displayName);
+    const labelW = textMetrics.width + 12;
+    const labelH = 18;
 
-    // Light panel background (semi-transparent, no heavy gradient)
-    ctx.fillStyle = "rgba(18,18,30,0.75)";
-    roundRect(ctx, x - 2, y - 2, width + 4, height + 4, 8);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.shadowColor = "rgba(0,0,0,0.1)";
+    ctx.shadowBlur = 4;
+    roundRect(ctx, x + width / 2 - labelW / 2, labelY - 12, labelW, labelH, 4);
     ctx.fill();
     ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
 
-    // Thin subtle border
-    ctx.strokeStyle = `${meta.color}44`;
-    ctx.lineWidth = 1;
-    roundRect(ctx, x - 2, y - 2, width + 4, height + 4, 8);
-    ctx.stroke();
+    ctx.fillStyle = "#222222";
+    ctx.textAlign = "center";
+    ctx.fillText(comp.displayName, x + width / 2, labelY);
 
     if (img) {
-        // Render Fritzing SVG at natural aspect ratio
+        // Draw the SVG standalone with no artificial background or borders
+        // (Just like standard Fritzing)
         const svgAspect = img.naturalWidth / img.naturalHeight;
-        const boxW = width - 6;
-        const boxH = height - 22; // Room for label
+        const boxW = width;
+        const boxH = height;
         let drawW: number, drawH: number;
 
         if (boxW / boxH > svgAspect) {
@@ -340,45 +360,31 @@ function drawComponentClean(
 
         ctx.font = "20px serif";
         ctx.textAlign = "center";
-        ctx.fillText(meta.icon, x + width / 2, y + height / 2 - 6);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(meta.icon, x + width / 2, y + height / 2 + 6);
     }
-
-    // Component name
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 10px 'Inter', 'Segoe UI', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(comp.displayName, x + width / 2, y + height - 2);
 
     // Pin connector dots
     for (const pin of comp.pins) {
         const pinColor = getWireColor(pin.label);
 
-        ctx.fillStyle = "#111";
-        ctx.beginPath();
-        ctx.arc(pin.x, pin.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = pinColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(pin.x, pin.y, 5, 0, Math.PI * 2);
-        ctx.stroke();
+        // Pin connector (Fritzing style square boot / header)
+        ctx.fillStyle = "#333333";
+        ctx.fillRect(pin.x - 4, pin.y - 4, 8, 8);
 
         ctx.fillStyle = pinColor;
-        ctx.beginPath();
-        ctx.arc(pin.x, pin.y, 2, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(pin.x - 2, pin.y - 2, 4, 4);
 
         // Pin label
-        ctx.fillStyle = "rgba(255,255,255,0.75)";
-        ctx.font = "bold 8px monospace";
+        ctx.fillStyle = "rgba(0,0,0,0.85)";
+        ctx.font = "bold 9px monospace";
         ctx.textAlign = "right";
-        ctx.fillText(pin.label, pin.x - 9, pin.y + 3);
+        ctx.fillText(pin.label, pin.x - 8, pin.y + 3);
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  A* MANHATTAN WIRE ROUTING
+//  WIRE ROUTING - Orthogonal A* Pathfinding
 // ═══════════════════════════════════════════════════════════════
 
 const BB_X = BOARD_X;
@@ -388,24 +394,13 @@ const BB_H = 80;
 const RAIL_VCC_Y = BB_Y + 18;
 const RAIL_GND_Y = BB_Y + BB_H - 18;
 
-function drawRoutedWires(
+function drawManhattanWires(
     ctx: CanvasRenderingContext2D,
-    grid: RoutingGrid,
     pinMapping: Record<string, string>,
     components: ReturnType<typeof buildComponentVisuals>,
-    needsBreadboard: boolean
+    needsBreadboard: boolean,
+    router: OrthogonalRouter
 ) {
-    // Global wire index — every wire gets a unique separation offset
-    let globalWireIdx = 0;
-
-    // If breadboard, draw power bus wires first
-    if (needsBreadboard) {
-        const vccPin = ARDUINO_UNO_PINS["5V"];
-        const gndPin = ARDUINO_UNO_PINS["GND"];
-        if (vccPin) drawManhattanWire(ctx, grid, vccPin.x, vccPin.y, BB_X + 40, RAIL_VCC_Y, "#FF4444", 3, globalWireIdx++);
-        if (gndPin) drawManhattanWire(ctx, grid, gndPin.x, gndPin.y, BB_X + 40, RAIL_GND_Y, "#4488FF", 3, globalWireIdx++);
-    }
-
     let vccTapIdx = 0;
     let gndTapIdx = 0;
 
@@ -414,7 +409,6 @@ function drawRoutedWires(
         const boardPin = ARDUINO_UNO_PINS[boardPinId];
         if (!boardPin) continue;
 
-        // Match by exact instance name (e.g., "led_red_0"), NOT by type
         const compVisual = components.find((c) => c.instance === instance);
         if (!compVisual) continue;
         const compPin = compVisual.pins.find((p) => p.label === pinName);
@@ -423,71 +417,50 @@ function drawRoutedWires(
         const wireColor = getWireColor(pinName);
         const isPower = boardPinId === "5V" || boardPinId === "3V3";
         const isGround = boardPinId === "GND";
+        const thickness = (isPower || isGround) ? 3.5 : 2.5;
 
-        // Wire thickness: power=3px, signal=2px
-        const thickness = (isPower || isGround) ? 3 : 2;
+        let fromX: number, fromY: number;
 
         if (needsBreadboard && (isPower || isGround)) {
-            // Route through breadboard rail
-            const railY = isPower ? RAIL_VCC_Y : RAIL_GND_Y;
-            const tapX = BB_X + 80 + (isPower ? vccTapIdx++ : gndTapIdx++) * 50;
+            fromY = isPower ? RAIL_VCC_Y : RAIL_GND_Y;
+            fromX = BB_X + 80 + (isPower ? vccTapIdx++ : gndTapIdx++) * 50;
             const color = isPower ? "#FF4444" : "#4488FF";
-            drawManhattanWire(ctx, grid, tapX, railY, compPin.x, compPin.y, color, thickness, globalWireIdx++);
-            drawEndpoint(ctx, tapX, railY, color);
+
+            router.unblockPin(fromX, fromY);
+
+            drawAStarJumper(ctx, fromX, fromY, compPin.x, compPin.y, color, thickness, router);
+            drawEndpoint(ctx, fromX, fromY, color);
             drawEndpoint(ctx, compPin.x, compPin.y, color);
         } else {
-            // Direct routed wire: Arduino pin → component pin
-            drawManhattanWire(ctx, grid, boardPin.x, boardPin.y, compPin.x, compPin.y, wireColor, thickness, globalWireIdx++);
-            drawEndpoint(ctx, boardPin.x, boardPin.y, wireColor);
+            fromX = boardPin.x;
+            fromY = boardPin.y;
+
+            drawAStarJumper(ctx, fromX, fromY, compPin.x, compPin.y, wireColor, thickness, router);
+
+            drawEndpoint(ctx, fromX, fromY, wireColor);
             drawEndpoint(ctx, compPin.x, compPin.y, wireColor);
         }
     }
 }
 
-function drawManhattanWire(
+function drawAStarJumper(
     ctx: CanvasRenderingContext2D,
-    grid: RoutingGrid,
     fromX: number, fromY: number,
     toX: number, toY: number,
     color: string, thickness: number,
-    wireIndex: number = 0
+    router: OrthogonalRouter
 ) {
-    // Stagger the START point slightly per wire index to prevent wires from
-    // sharing the exact same path through the A* grid.
-    // Offset perpendicular to the general from→to direction.
-    const stagger = (wireIndex % 6) * 10 - 25; // range: -25 to +25
-    const dx = toX - fromX;
-    const dy = toY - fromY;
-    const isMoreHorizontal = Math.abs(dx) > Math.abs(dy);
+    const path = router.routeWire(fromX, fromY, toX, toY);
 
-    // Apply stagger perpendicular to the dominant direction
-    const staggeredFromX = isMoreHorizontal ? fromX : fromX + stagger;
-    const staggeredFromY = isMoreHorizontal ? fromY + stagger : fromY;
-
-    // Find path using A*
-    const path = findPath(grid, staggeredFromX, staggeredFromY, toX, toY);
-    if (path.length < 2) return;
-
-    // Snap start back to exact pin position
-    path[0] = { x: fromX, y: fromY };
-
-    // ═══ PASS 1: DARK HALO (creates over/under crossing illusion) ═══
-    ctx.strokeStyle = "#0d0d20"; // Match canvas dark bg
-    ctx.lineWidth = thickness + 8;
+    // Border (Dark silhouette underneath wire)
+    ctx.strokeStyle = "#222222";
+    ctx.lineWidth = thickness + 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     drawPathWithCorners(ctx, path, 6);
     ctx.stroke();
 
-    // ═══ PASS 2: SUBTLE GLOW ═══
-    ctx.strokeStyle = color + "25";
-    ctx.lineWidth = thickness + 4;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    drawPathWithCorners(ctx, path, 6);
-    ctx.stroke();
-
-    // ═══ PASS 3: CRISP CORE WIRE ═══
+    // Core Solid Wire Color
     ctx.strokeStyle = color;
     ctx.lineWidth = thickness;
     ctx.lineCap = "round";
@@ -498,6 +471,7 @@ function drawManhattanWire(
 
 /** Draw a polyline path with rounded corners at each bend */
 function drawPathWithCorners(ctx: CanvasRenderingContext2D, path: Point[], radius: number) {
+    if (path.length === 0) return;
     ctx.beginPath();
     ctx.moveTo(path[0].x, path[0].y);
 
@@ -506,7 +480,7 @@ function drawPathWithCorners(ctx: CanvasRenderingContext2D, path: Point[], radiu
 
         if (i < path.length - 1) {
             const next = path[i + 1];
-            // Use arcTo for rounded corners
+            // Use arcTo for rounded corners so it looks professional
             ctx.arcTo(curr.x, curr.y, next.x, next.y, radius);
         } else {
             ctx.lineTo(curr.x, curr.y);
@@ -515,20 +489,42 @@ function drawPathWithCorners(ctx: CanvasRenderingContext2D, path: Point[], radiu
 }
 
 function drawEndpoint(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
-    ctx.fillStyle = color + "55";
+    // Outer glow for connected pins
     ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.3;
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+
+    // Inner dot
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
 
-    ctx.fillStyle = color;
+    // Tiny white highlight for reflection
     ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.arc(x - 1, y - 1, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#FFFFFF";
     ctx.fill();
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  BREADBOARD — Procedural (below Arduino)
+//  BREADBOARD
 // ═══════════════════════════════════════════════════════════════
+
+function drawBreadboardSVG(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+    ctx.shadowColor = "rgba(0,0,0,0.15)";
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetY = 4;
+
+    // Scale SVG into the procedural BB footprint
+    ctx.drawImage(img, BB_X, BB_Y - 10, BB_W, BB_H + 20);
+
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+}
 
 function drawBreadboard(ctx: CanvasRenderingContext2D) {
     const bbGrad = ctx.createLinearGradient(BB_X, BB_Y, BB_X, BB_Y + BB_H);
@@ -581,7 +577,7 @@ function drawBreadboard(ctx: CanvasRenderingContext2D) {
     // Pin holes
     for (let i = 0; i < 38; i++) {
         const hx = BB_X + 24 + i * 14;
-        ctx.fillStyle = "#bbb";
+        ctx.fillStyle = "#444"; // Darker realistic holes
         ctx.beginPath();
         ctx.arc(hx, RAIL_VCC_Y, 2.5, 0, Math.PI * 2);
         ctx.fill();
@@ -590,7 +586,7 @@ function drawBreadboard(ctx: CanvasRenderingContext2D) {
         ctx.fill();
     }
 
-    ctx.fillStyle = "#888";
+    ctx.fillStyle = "#555";
     ctx.font = "bold 8px 'Inter', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("BREADBOARD · POWER RAILS", BB_X + BB_W / 2, BB_Y - 5);
@@ -604,10 +600,10 @@ function drawLegend(ctx: CanvasRenderingContext2D, componentCount: number) {
     const lx = 16;
     const ly = CANVAS_H - 48;
 
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.font = "bold 10px 'Inter', sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(`IoT Circuit Builder · ${componentCount} components · A* routed`, lx, ly);
+    ctx.fillText(`IoT Circuit Builder · ${componentCount} components · A* strict parallel`, lx, ly);
 
     const legend = [
         { color: "#FF4444", label: "VCC" },
@@ -629,7 +625,7 @@ function drawLegend(ctx: CanvasRenderingContext2D, componentCount: number) {
         ctx.lineTo(ix + 24, iy);
         ctx.stroke();
 
-        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
         ctx.font = "9px 'Inter', sans-serif";
         ctx.fillText(item.label, ix + 28, iy + 3);
     });

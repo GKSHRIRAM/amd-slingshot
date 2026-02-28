@@ -11,6 +11,9 @@ public class ComponentPinRequirement
     public bool IsOptional { get; set; }
     public string? Description { get; set; }
 
+    // Electrical Identity for ERC Checking
+    public ErcPinType ErcType { get; set; } = ErcPinType.Unspecified;
+
     // Navigation
     public Component Component { get; set; } = null!;
 }

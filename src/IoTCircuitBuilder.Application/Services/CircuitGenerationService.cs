@@ -4,6 +4,7 @@ using IoTCircuitBuilder.Core.Interfaces;
 using IoTCircuitBuilder.Core.Validation;
 using IoTCircuitBuilder.Domain.Entities;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace IoTCircuitBuilder.Application.Services;
 
@@ -15,6 +16,7 @@ public class CircuitGenerationService : ICircuitGenerationService
     private readonly IConstraintSolver _solver;
     private readonly ICodeGenerator _codeGenerator;
     private readonly PinMappingValidator _validator;
+    private readonly IComponentDependencyService _dependencyService;
     private readonly ILogger<CircuitGenerationService> _logger;
 
     public CircuitGenerationService(
@@ -24,6 +26,7 @@ public class CircuitGenerationService : ICircuitGenerationService
         IConstraintSolver solver,
         ICodeGenerator codeGenerator,
         PinMappingValidator validator,
+        IComponentDependencyService dependencyService,
         ILogger<CircuitGenerationService> logger)
     {
         _llmService = llmService;
@@ -32,6 +35,7 @@ public class CircuitGenerationService : ICircuitGenerationService
         _solver = solver;
         _codeGenerator = codeGenerator;
         _validator = validator;
+        _dependencyService = dependencyService;
         _logger = logger;
     }
 
@@ -57,19 +61,32 @@ public class CircuitGenerationService : ICircuitGenerationService
                 .SelectMany(c => Enumerable.Repeat(c.Type, c.Quantity))
                 .ToList();
 
-            var components = await _componentRepository.GetComponentsByTypesAsync(componentTypes);
+            var initialComponents = await _componentRepository.GetComponentsByTypesAsync(componentTypes);
 
-            if (components.Count == 0)
+            if (initialComponents.Count == 0 && componentTypes.Count > 0)
                 return GenerateCircuitResponse.Fail("No recognized components found in your description.");
 
-            var unknownTypes = componentTypes.Except(components.Select(c => c.Type)).Distinct().ToList();
+            // ─── PHASE 2.5: Auto-Inject Dependencies (Power Budget & Topology) ──────────────
+            _logger.LogInformation("Phase 2.5: Analyzing physical limits and injecting hardware dependencies");
+            var (injectedTypes, dependencyAdvice, preAssignments, needsBreadboardFromDeps) = _dependencyService.AnalyzeAndInject(board, initialComponents, prompt);
+
+            // Fetch any newly injected components (Batteries, Motor Drivers, etc)
+            var injectedComponents = new List<Component>();
+            if (injectedTypes.Any())
+            {
+                injectedComponents = await _componentRepository.GetComponentsByTypesAsync(injectedTypes);
+            }
+
+            var allComponents = initialComponents.Concat(injectedComponents).ToList();
+
+            var unknownTypes = componentTypes.Except(allComponents.Select(c => c.Type)).Distinct().ToList();
             if (unknownTypes.Any())
             {
-                _logger.LogWarning("Unknown component types: {Types}", string.Join(", ", unknownTypes));
+                _logger.LogWarning("Unknown component types requested: {Types}", string.Join(", ", unknownTypes));
             }
 
             // ─── PHASE 3: Check I2C Conflicts ───────────────────
-            var componentIds = components.Select(c => c.ComponentId).Distinct().ToList();
+            var componentIds = allComponents.Select(c => c.ComponentId).ToList();
             var hasI2cConflict = await _componentRepository.CheckI2cConflictsAsync(componentIds);
             if (hasI2cConflict)
             {
@@ -83,8 +100,9 @@ public class CircuitGenerationService : ICircuitGenerationService
             }
 
             // ─── PHASE 4: Solve Constraints ─────────────────────
-            _logger.LogInformation("Phase 3: Solving constraints for {Count} components", components.Count);
-            var solverResult = await _solver.SolveAsync(board, components);
+            _logger.LogInformation("Phase 3: Solving constraints for {Count} components with {Assignments} pre-assigned topological wires", allComponents.Count, preAssignments.Count);
+            
+            var solverResult = await _solver.SolveAsync(board, allComponents, preAssignments);
 
             if (!solverResult.Success)
             {
@@ -92,11 +110,11 @@ public class CircuitGenerationService : ICircuitGenerationService
                 return GenerateCircuitResponse.Fail(solverResult.Error!);
             }
 
-            _logger.LogInformation("Solver succeeded with {Mappings} pin assignments", solverResult.PinMapping.Count);
+            _logger.LogInformation("Solver succeeded with {Mappings} total pin assignments", solverResult.PinMapping.Count);
 
             // ─── PHASE 4.5: Post-Solve Validation (Safety Net) ───
             _logger.LogInformation("Phase 4.5: Validating pin mapping");
-            var validation = _validator.Validate(solverResult.PinMapping, board, components);
+            var validation = _validator.Validate(solverResult.PinMapping, board, allComponents);
             if (!validation.IsValid)
             {
                 _logger.LogError("Post-solve validation FAILED");
@@ -108,16 +126,19 @@ public class CircuitGenerationService : ICircuitGenerationService
 
             // ─── PHASE 5: Generate Code ─────────────────────────
             _logger.LogInformation("Phase 4: Generating Arduino code");
-            var code = await _codeGenerator.GenerateCodeAsync(solverResult.PinMapping, components);
+            var code = await _codeGenerator.GenerateCodeAsync(solverResult.PinMapping, allComponents);
 
             _logger.LogInformation("Pipeline completed successfully");
+
+            var allWarnings = new List<string>(solverResult.Warnings);
+            allWarnings.AddRange(dependencyAdvice);
 
             return GenerateCircuitResponse.Ok(
                 solverResult.PinMapping,
                 code,
-                components.Select(c => c.DisplayName ?? c.Type).ToList(),
-                solverResult.NeedsBreadboard,
-                solverResult.Warnings
+                allComponents.Select(c => c.DisplayName ?? c.Type).ToList(),
+                solverResult.NeedsBreadboard || needsBreadboardFromDeps,
+                allWarnings
             );
         }
         catch (Exception ex)

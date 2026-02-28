@@ -1,6 +1,6 @@
 import { GenerateCircuitRequest, GenerateCircuitResponse } from "@/types/circuit";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5201";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
 
 export async function generateCircuit(
     request: GenerateCircuitRequest

@@ -10,8 +10,15 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@types/file-saver": "^2.0.7",
+    "@wokwi/elements": "^1.9.1",
+    "@xyflow/react": "^12.10.1",
+    "elkjs": "^0.11.0",
+    "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "konva": "^10.2.0",
     "next": "16.1.6",
+    "pathfinding": "^0.4.18",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-konva": "^19.2.2"
@@ -19,6 +26,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pathfinding": "^0.1.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

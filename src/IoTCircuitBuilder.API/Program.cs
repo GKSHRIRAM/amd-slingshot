@@ -39,6 +39,7 @@ builder.Services.AddHttpClient<ILLMService, LLMService>();
 builder.Services.AddScoped<ICodeGenerator, CodeGeneratorService>();
 
 // ─── Application Services ──────────────────────────────────────
+builder.Services.AddScoped<IComponentDependencyService, ComponentDependencyService>();
 builder.Services.AddScoped<ICircuitGenerationService, CircuitGenerationService>();
 
 // ─── API ───────────────────────────────────────────────────────
@@ -50,20 +51,40 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ─── CORS (for frontend) ──────────────────────────────────────
+// ✅ SECURITY FIX: Restrict CORS to specific origins
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.WithOrigins(
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://192.168.0.104:3000"
+        )
+        .AllowAnyHeader()
+        .WithMethods("GET", "POST", "OPTIONS")
+        .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
 // ─── Middleware ─────────────────────────────────────────────────
-if (app.Environment.IsDevelopment())
+// ✅ SECURITY FIX: Add security headers
+app.Use(async (context, next) =>
+{
+    // Prevent MIME type sniffing
+    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+    // Prevent clickjacking
+    context.Response.Headers.Add("X-Frame-Options", "DENY");
+    // XSS protection
+    context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
+    // Referrer policy
+    context.Response.Headers.Add("Referrer-Policy", "strict-origin-when-cross-origin");
+    await next();
+});
+
+if (!app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();

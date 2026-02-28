@@ -270,6 +270,26 @@ export const COMPONENT_CONNECTOR_MAPS: Record<string, Record<string, string>> = 
         connector1: "GND",
         connector2: "SIGNAL",
     },
+    battery_9v: {
+        connector0: "VCC",
+        connector1: "GND",
+    },
+    resistor: {
+        connector0: "PIN1",
+        connector1: "PIN2",
+    },
+    diode: {
+        connector0: "ANODE",
+        connector1: "CATHODE",
+    },
+    capacitor_ceramic: {
+        connector0: "PIN1",
+        connector1: "PIN2",
+    },
+    capacitor_electrolytic: {
+        connector0: "ANODE",
+        connector1: "CATHODE",
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════

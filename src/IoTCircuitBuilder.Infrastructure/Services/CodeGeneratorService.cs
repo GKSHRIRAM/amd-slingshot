@@ -75,8 +75,8 @@ void loop() {{
         var lines = new List<string>();
         foreach (var (key, value) in pinMapping)
         {
-            // Skip power/ground pins in defines
-            if (value is "5V" or "3V3" or "GND") continue;
+            // Skip power/ground pins and topological (component-to-component) mappings in defines
+            if (value is "5V" or "3V3" or "GND" || value.Contains('.')) continue;
 
             string defineName = key.Replace(".", "_").ToUpperInvariant();
             // Extract numeric pin number: D3 → 3, A0 → A0
@@ -90,6 +90,8 @@ void loop() {{
     {
         var lines = new List<string>();
         var processed = new HashSet<string>();
+
+        var renderedBlocks = new HashSet<string>();
 
         foreach (var comp in components)
         {
@@ -114,7 +116,12 @@ void loop() {{
                     pinValues["instance_id"] = idx;
                     pinValues["display_name"] = comp.DisplayName ?? comp.Type;
 
-                    lines.Add(parsedTmpl.Render(pinValues));
+                    var rendered = parsedTmpl.Render(pinValues).Trim();
+                    if (!string.IsNullOrWhiteSpace(rendered) && !renderedBlocks.Contains(rendered))
+                    {
+                        lines.Add(rendered);
+                        renderedBlocks.Add(rendered);
+                    }
                 }
             }
         }
@@ -208,6 +215,9 @@ void loop() {{
         foreach (var (key, value) in pinMapping)
         {
             if (!key.StartsWith(instanceLabel + ".")) continue;
+
+            // Skip topological pins (connections to other components) in the code context
+            if (value.Contains('.')) continue;
 
             string pinName = key.Split('.')[1].ToLowerInvariant();
             string pinValue = value.StartsWith("D") ? value[1..] : value;
