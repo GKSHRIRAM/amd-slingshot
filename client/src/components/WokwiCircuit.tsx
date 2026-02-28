@@ -19,6 +19,7 @@ import { getLayoutedElements } from "../lib/layoutEngine";
 // Wokwi elements are client-side only custom elements
 if (typeof window !== "undefined") {
     require("@wokwi/elements");
+    require("../lib/customWokwiElements");
 }
 
 interface WokwiCircuitProps {
@@ -33,6 +34,8 @@ const nodeTypes = {
 
 const WOKWI_REGISTRY: Record<string, string> = {
     arduino_uno: "wokwi-arduino-uno",
+    esp32_devkit_v1: "wokwi-esp32-devkit-v1",
+    esp32: "wokwi-esp32-devkit-v1",
     led_red: "wokwi-led",
     push_button: "wokwi-pushbutton",
     resistor: "wokwi-resistor",
@@ -44,8 +47,14 @@ const WOKWI_REGISTRY: Record<string, string> = {
     ssd1306: "wokwi-ssd1306",
     dht11: "wokwi-dht11",
     ldr_sensor: "wokwi-photoresistor-sensor",
+    photoresistor: "wokwi-photoresistor-sensor",
+    photosensor: "wokwi-photoresistor-sensor",
     ir_sensor: "wokwi-ir-receiver",
-    breadboard: "wokwi-breadboard-half"
+    breadboard: "wokwi-breadboard-half",
+    hc_05_bluetooth: "custom-hc-05",
+    bluetooth_hc05: "custom-hc-05",
+    rf_transmitter: "custom-rf-transmitter",
+    rf_receiver: "custom-rf-receiver"
 };
 
 export default function WokwiCircuit({ pinMapping, needsBreadboard }: WokwiCircuitProps) {
@@ -143,6 +152,11 @@ export default function WokwiCircuit({ pinMapping, needsBreadboard }: WokwiCircu
                 if (type === "l298n_motor_driver") cPin = pinName;
                 if (type === "battery_9v") cPin = pinName;
                 if (type.startsWith("capacitor")) cPin = (pinName === "PIN1" || pinName === "ANODE") ? "1" : "2";
+
+                // Keep original custom component names
+                if (wokwiType.startsWith("custom-")) cPin = pinName;
+                if (wokwiType === "wokwi-esp32-devkit-v1") cPin = pinName;
+                if (wokwiType === "wokwi-photoresistor-sensor") cPin = pinName;
             }
 
             let targetInst = unoId;
@@ -165,6 +179,11 @@ export default function WokwiCircuit({ pinMapping, needsBreadboard }: WokwiCircu
                     if (tType === "l298n_motor_driver") targetPin = targetPin;
                     if (tType === "battery_9v") targetPin = targetPin;
                     if (tType.startsWith("capacitor")) targetPin = (targetPin === "PIN1" || targetPin === "ANODE") ? "1" : "2";
+
+                    // Keep custom ones
+                    if (tWokwiType.startsWith("custom-")) targetPin = targetPin;
+                    if (tWokwiType === "wokwi-esp32-devkit-v1") targetPin = targetPin;
+                    if (tWokwiType === "wokwi-photoresistor-sensor") targetPin = targetPin;
                 }
             } else {
                 // Formatting for Arduino Uno standard targets

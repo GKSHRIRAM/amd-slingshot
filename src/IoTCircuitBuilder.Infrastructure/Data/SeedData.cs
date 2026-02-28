@@ -275,6 +275,27 @@ public static class SeedData
                 Category = "hardware", CurrentDrawMa = 0, VoltageMin = 0m, VoltageMax = 50m,
                 RequiresExternalPower = false, InterfaceProtocol = "none",
                 IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 21, Type = "bluetooth_hc05", DisplayName = "HC-05 Bluetooth Module",
+                Category = "communication", CurrentDrawMa = 30, VoltageMin = 3.3m, VoltageMax = 5.0m,
+                RequiresExternalPower = false, InterfaceProtocol = "uart",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 22, Type = "rf_transmitter", DisplayName = "433MHz RF Transmitter",
+                Category = "communication", CurrentDrawMa = 10, VoltageMin = 3.3m, VoltageMax = 5.0m,
+                RequiresExternalPower = false, InterfaceProtocol = "digital",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new Component
+            {
+                ComponentId = 23, Type = "rf_receiver", DisplayName = "433MHz RF Receiver",
+                Category = "communication", CurrentDrawMa = 5, VoltageMin = 3.3m, VoltageMax = 5.0m,
+                RequiresExternalPower = false, InterfaceProtocol = "digital",
+                IsActive = true, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
     }
@@ -382,6 +403,25 @@ public static class SeedData
         // Electrolytic Capacitor (ComponentId=19): ANODE, CATHODE (Passive)
         reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 19, PinName = "ANODE", RequiredCapability = PinCapabilityType.Analog, ErcType = ErcPinType.Passive });
         reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 19, PinName = "CATHODE", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.Passive });
+
+        // HC-05 (ComponentId=21): VCC, GND, TXD, RXD, STATE, EN
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 21, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 21, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 21, PinName = "TXD", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 21, PinName = "RXD", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 21, PinName = "STATE", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 21, PinName = "EN", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+
+        // RF Transmitter (ComponentId=22): VCC, GND, ATAD (data)
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 22, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 22, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 22, PinName = "ATAD", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Input });
+
+        // RF Receiver (ComponentId=23): VCC, GND, DATA1, DATA2
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 23, PinName = "VCC", RequiredCapability = PinCapabilityType.Power5V, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 23, PinName = "GND", RequiredCapability = PinCapabilityType.Ground, ErcType = ErcPinType.PowerIn });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 23, PinName = "DATA1", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
+        reqs.Add(new ComponentPinRequirement { RequirementId = id++, ComponentId = 23, PinName = "DATA2", RequiredCapability = PinCapabilityType.Digital, ErcType = ErcPinType.Output });
 
         mb.Entity<ComponentPinRequirement>().HasData(reqs);
     }
@@ -603,7 +643,13 @@ Serial.println(""Relay {{ instance_id }}: ON"");
 delay(2000);
 digitalWrite({{ pin_signal }}, HIGH);  // Relay OFF
 Serial.println(""Relay {{ instance_id }}: OFF"");
-delay(2000);" }
+delay(2000);" },
+            new CodeTemplate { TemplateId = 29, ComponentId = 22, TemplateType = "loop", Language = "cpp", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                TemplateContent = @"// RF Transmitter
+digitalWrite({{ pin_atad }}, HIGH);
+delay(100);
+digitalWrite({{ pin_atad }}, LOW);
+delay(100);" }
         );
     }
 

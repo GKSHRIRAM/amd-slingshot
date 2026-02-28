@@ -36,7 +36,7 @@ SENSORS:
     Triggers: ""barometer"", ""altitude"", ""pressure"", ""weather station""
   
   • ldr_sensor - Light-dependent resistor (photoresistor)
-    Triggers: ""light"", ""brightness"", ""LDR"", ""day/night""
+    Triggers: ""light"", ""brightness"", ""LDR"", ""day/night"", ""photosensor"", ""solar"", ""solar tracking""
 
 ACTUATORS:
   • sg90_servo - Micro servo motor (0-180° rotation, 1.8kg-cm torque)
@@ -71,6 +71,16 @@ OUTPUT:
   
   • relay_module - 5V relay (switch high-power devices)
     Triggers: ""relay"", ""switch AC"", ""control appliance"", ""230V""
+
+COMMUNICATION:
+  • bluetooth_hc05 - HC-05 Bluetooth module
+    Triggers: ""bluetooth"", ""wireless"", ""app"", ""phone"", ""HC-05""
+  
+  • rf_transmitter - 433MHz RF Transmitter
+    Triggers: ""RF"", ""transmit"", ""radio"", ""wireless remote""
+  
+  • rf_receiver - 433MHz RF Receiver
+    Triggers: ""RF"", ""receive"", ""radio""
 
 PASSIVES:
   • resistor - Standard resistor
@@ -127,6 +137,11 @@ PATTERN: ""Line Following Robot""
 PATTERN: ""Smart Dustbin"" / ""Automatic Trash Can""
   → 1x hc_sr04_ultrasonic + 1x sg90_servo
 
+PATTERN: ""Bluetooth RC Car"" / ""Smartphone Controlled Robot""
+  → 2x dc_motor + 1x l298n_motor_driver
+  → 1x bluetooth_hc05
+  (Note: The smartphone acts as the remote, so NO physical buttons/joysticks are needed on the Arduino)
+
 PATTERN: ""Weather Station""
   → 1x dht11 + 1x oled_128x64
   OR → 1x bme280 + 1x oled_128x64 (for pressure/altitude)
@@ -160,7 +175,16 @@ IF ""servo"" mentioned:
   → Use sg90_servo (do NOT use dc_motor)
 
 IF ""sensor"" mentioned without specifics:
-  → ASK YOURSELF: Distance = hc_sr04_ultrasonic, Line = ir_sensor, Temp = dht11
+  → ASK YOURSELF: Distance = hc_sr04_ultrasonic, Line = ir_sensor, Temp = dht11, Solar/Light tracking = ldr_sensor
+
+IF ""bluetooth"" or ""phone app"" is mentioned:
+  → MUST include 1x bluetooth_hc05
+  
+IF ""remote control"", ""radio"", or ""RF"" is mentioned:
+  → default to generating the RECEIVER car (dc_motors, motor_driver, rf_receiver). Do NOT put the transmitter joysticks/buttons on the same board as the motors. The transmitter must be generated in a separate request.
+
+IF ""solar tracking"" is mentioned:
+  → MUST include 2x ldr_sensor + 2x sg90_servo
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT (STRICT JSON):
@@ -223,6 +247,18 @@ Output:
   ]
 }
 
+EXAMPLE 4 - Bluetooth RC Car:
+Input: ""Remote controlled robot car using bluetooth""
+Output:
+{
+  ""board"": ""arduino_uno"",
+  ""components"": [
+    {""type"": ""dc_motor"", ""quantity"": 2, ""purpose"": ""Car drive motors""},
+    {""type"": ""l298n_motor_driver"", ""quantity"": 1, ""purpose"": ""Drive the motors""},
+    {""type"": ""bluetooth_hc05"", ""quantity"": 1, ""purpose"": ""Receive commands from smartphone app""}
+  ]
+}
+
 ═══════════════════════════════════════════════════════════════
 ERROR PREVENTION CHECKLIST (Verify before output):
 ═══════════════════════════════════════════════════════════════
@@ -235,6 +271,7 @@ ERROR PREVENTION CHECKLIST (Verify before output):
 ✓ Is output valid JSON? (No extra text, no markdown backticks)
 ✓ Does each component have a clear ""purpose""?
 ✓ If user said ""line follower"", did I include at least 2x ir_sensor?
+✓ CRITICAL TETHERING CHECK: If this is a remote control RECEIVER (like an RC car with motors), did I ENSURE there are NO potentiometers or push_buttons on the board? The remote is separate!
 
 ═══════════════════════════════════════════════════════════════
 SPECIAL CASES:

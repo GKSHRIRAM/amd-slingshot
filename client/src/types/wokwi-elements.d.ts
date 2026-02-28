@@ -26,5 +26,9 @@ declare namespace JSX {
         'wokwi-heart-rate-sensor': any;
         'wokwi-analog-joystick': any;
         'wokwi-slide-potentiometer': any;
+        'wokwi-esp32-devkit-v1': any;
+        'custom-hc-05': any;
+        'custom-rf-transmitter': any;
+        'custom-rf-receiver': any;
     }
 }
