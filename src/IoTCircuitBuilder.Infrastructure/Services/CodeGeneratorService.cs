@@ -14,9 +14,9 @@ public class CodeGeneratorService : ICodeGenerator
         _logger = logger;
     }
 
-    public Task<string> GenerateCodeAsync(Dictionary<string, string> pinMapping, List<Component> components)
+    public Task<string> GenerateCodeAsync(Dictionary<string, string> pinMapping, List<Component> components, string logicType)
     {
-        _logger.LogInformation("Generating code with {MappingCount} pin assignments", pinMapping.Count);
+        _logger.LogInformation("Generating code with {MappingCount} pin assignments for logic type: {LogicType}", pinMapping.Count, logicType);
 
         var libraries = CollectLibraries(components);
         var declarations = GenerateDeclarations(pinMapping, components);

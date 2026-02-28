@@ -267,9 +267,25 @@ OUTPUT ONLY THE JSON OBJECT. NO OTHER TEXT.";
     {
         _httpClient = httpClient;
         _logger = logger;
-        _geminiApiKey = config["Gemini:ApiKey"] ?? "";
-        _groqApiKey = config["Groq:ApiKey"] ?? "";
-        _perplexityApiKey = config["Perplexity:ApiKey"] ?? "";
+        
+        // ✅ SECURITY FIX: Load API keys from environment variables (from .env file)
+        // Priority: Environment variables > Configuration > Empty string
+        _geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") 
+            ?? config["Gemini:ApiKey"] 
+            ?? "";
+        
+        _groqApiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY") 
+            ?? config["Groq:ApiKey"] 
+            ?? "";
+        
+        _perplexityApiKey = Environment.GetEnvironmentVariable("PERPLEXITY_API_KEY") 
+            ?? config["Perplexity:ApiKey"] 
+            ?? "";
+        
+        _logger.LogInformation("API Keys Status: Perplexity={HasPerplexity}, Gemini={HasGemini}, Groq={HasGroq}",
+            !string.IsNullOrEmpty(_perplexityApiKey),
+            !string.IsNullOrEmpty(_geminiApiKey),
+            !string.IsNullOrEmpty(_groqApiKey));
     }
 
     public async Task<ProjectIntent> ParseIntentAsync(string prompt)

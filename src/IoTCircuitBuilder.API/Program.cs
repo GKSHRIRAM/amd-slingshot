@@ -1,3 +1,4 @@
+using DotNetEnv;
 using IoTCircuitBuilder.Application.Interfaces;
 using IoTCircuitBuilder.Application.Services;
 using IoTCircuitBuilder.Core.Algorithms;
@@ -8,6 +9,9 @@ using IoTCircuitBuilder.Infrastructure.Repositories;
 using IoTCircuitBuilder.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+
+// ─── Load .env file ───────────────────────────────────────────
+Env.Load(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env"));
 
 // ─── Serilog Bootstrap ─────────────────────────────────────────
 Log.Logger = new LoggerConfiguration()
