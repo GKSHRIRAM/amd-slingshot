@@ -4,5 +4,5 @@ namespace IoTCircuitBuilder.Application.Interfaces;
 
 public interface ICodeGenerator
 {
-    Task<string> GenerateCodeAsync(Dictionary<string, string> pinMapping, List<Component> components);
+    Task<string> GenerateCodeAsync(Dictionary<string, string> pinMapping, List<Component> components, string logicType);
 }

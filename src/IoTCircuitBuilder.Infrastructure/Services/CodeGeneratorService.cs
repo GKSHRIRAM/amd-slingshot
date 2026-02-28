@@ -14,14 +14,19 @@ public class CodeGeneratorService : ICodeGenerator
         _logger = logger;
     }
 
-    public Task<string> GenerateCodeAsync(Dictionary<string, string> pinMapping, List<Component> components)
+    public Task<string> GenerateCodeAsync(
+        Dictionary<string, string> pinMapping,
+        List<Component> components,
+        string logicType)
     {
-        _logger.LogInformation("Generating code with {MappingCount} pin assignments", pinMapping.Count);
+        _logger.LogInformation(
+            "Generating code with {MappingCount} pin assignments",
+            pinMapping.Count);
 
         var libraries = CollectLibraries(components);
         var declarations = GenerateDeclarations(pinMapping, components);
         var setupCode = GenerateSetup(pinMapping, components);
-        var loopCode = GenerateLoop(pinMapping, components);
+        var loopCode = GenerateLoop(pinMapping, components, logicType);
         var pinDefines = GeneratePinDefines(pinMapping);
 
         var code = $@"// ═══════════════════════════════════════════════════
@@ -48,17 +53,154 @@ void setup() {{
 void loop() {{
 {loopCode}
 
-  delay(100);  // Main loop delay
+  delay(100);
 }}
 ";
 
-        _logger.LogInformation("Code generation complete: {LineCount} lines", code.Split('\n').Length);
         return Task.FromResult(code);
     }
+
+
+    // ===========================
+    // LOGIC LOOP GENERATOR
+    // ===========================
+
+    private string GenerateLoop(
+        Dictionary<string, string> pinMapping,
+        List<Component> components,
+        string logicType)
+    {
+        var lines = new List<string>();
+
+        // ---------- LINE FOLLOWER ----------
+        if (logicType == "line_follower")
+        {
+            lines.Add("  // Line follower logic");
+
+            lines.Add("  int left = digitalRead(IR_SENSOR_0_OUT);");
+            lines.Add("  int mid = digitalRead(IR_SENSOR_1_OUT);");
+            lines.Add("  int right = digitalRead(IR_SENSOR_2_OUT);");
+
+            lines.Add("  if(mid == LOW){");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENA, 180);");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENB, 180);");
+            lines.Add("  }");
+            lines.Add("  else if(left == LOW){");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENA, 120);");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENB, 180);");
+            lines.Add("  }");
+            lines.Add("  else if(right == LOW){");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENA, 180);");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENB, 120);");
+            lines.Add("  }");
+            lines.Add("  else {");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENA, 0);");
+            lines.Add("    analogWrite(L298N_MOTOR_DRIVER_0_ENB, 0);");
+            lines.Add("  }");
+
+            return string.Join("\n", lines);
+        }
+
+
+        // ---------- MAZE SOLVER ----------
+        if (logicType == "maze_solver")
+        {
+            lines.Add("  // Maze solver logic");
+
+            lines.Add("  int left = digitalRead(IR_SENSOR_0_OUT);");
+            lines.Add("  int mid = digitalRead(IR_SENSOR_1_OUT);");
+            lines.Add("  int right = digitalRead(IR_SENSOR_2_OUT);");
+
+            lines.Add("  if(left == LOW){");
+            lines.Add("    // turn left");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN1, LOW);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN2, HIGH);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN3, HIGH);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN4, LOW);");
+            lines.Add("  }");
+
+            lines.Add("  else if(right == LOW){");
+            lines.Add("    // turn right");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN1, HIGH);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN2, LOW);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN3, LOW);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN4, HIGH);");
+            lines.Add("  }");
+
+            lines.Add("  else {");
+            lines.Add("    // forward");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN1, HIGH);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN2, LOW);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN3, HIGH);");
+            lines.Add("    digitalWrite(L298N_MOTOR_DRIVER_0_IN4, LOW);");
+            lines.Add("  }");
+
+            return string.Join("\n", lines);
+        }
+
+
+        // ---------- DEFAULT TEMPLATE ----------
+        return GenerateLoopDefault(pinMapping, components);
+    }
+
+
+    // ===========================
+    // OLD TEMPLATE LOOP (fallback)
+    // ===========================
+
+    private string GenerateLoopDefault(
+        Dictionary<string, string> pinMapping,
+        List<Component> components)
+    {
+        var lines = new List<string>();
+        var processed = new HashSet<string>();
+
+        foreach (var comp in components)
+        {
+            var instances = pinMapping.Keys
+                .Select(k => k.Split('.')[0])
+                .Where(k => k.StartsWith(comp.Type))
+                .Distinct()
+                .ToList();
+
+            foreach (var instance in instances)
+            {
+                if (processed.Contains(instance)) continue;
+                processed.Add(instance);
+
+                var idx = instance.Replace(comp.Type + "_", "");
+
+                foreach (var tmpl in comp.CodeTemplates.Where(t => t.TemplateType == "loop"))
+                {
+                    var parsedTmpl = Template.Parse(tmpl.TemplateContent);
+                    var pinValues = BuildTemplateContext(instance, pinMapping);
+
+                    pinValues["instance_id"] = idx;
+                    pinValues["display_name"] = comp.DisplayName ?? comp.Type;
+                    pinValues["var_name"] = $"{comp.Type}_{idx}";
+
+                    var rendered = parsedTmpl.Render(pinValues);
+
+                    lines.AddRange(
+                        rendered.Split('\n')
+                        .Select(l => $"  {l}")
+                    );
+                }
+            }
+        }
+
+        return string.Join("\n", lines);
+    }
+
+
+    // ===========================
+    // OTHER METHODS (unchanged)
+    // ===========================
 
     private List<string> CollectLibraries(List<Component> components)
     {
         var libs = new HashSet<string>();
+
         foreach (var comp in components)
         {
             foreach (var cl in comp.ComponentLibraries)
@@ -67,22 +209,26 @@ void loop() {{
                     libs.Add(cl.Library.Name);
             }
         }
+
         return libs.ToList();
     }
+
 
     private string GeneratePinDefines(Dictionary<string, string> pinMapping)
     {
         var lines = new List<string>();
+
         foreach (var (key, value) in pinMapping)
         {
-            // Skip power/ground pins in defines
-            if (value is "5V" or "3V3" or "GND") continue;
+            if (value is "5V" or "3V3" or "GND")
+                continue;
 
-            string defineName = key.Replace(".", "_").ToUpperInvariant();
-            // Extract numeric pin number: D3 → 3, A0 → A0
-            string pinValue = value.StartsWith("D") ? value[1..] : value;
-            lines.Add($"#define {defineName} {pinValue}");
+            string name = key.Replace(".", "_").ToUpperInvariant();
+            string pin = value.StartsWith("D") ? value[1..] : value;
+
+            lines.Add($"#define {name} {pin}");
         }
+
         return string.Join("\n", lines);
     }
 
@@ -93,7 +239,6 @@ void loop() {{
 
         foreach (var comp in components)
         {
-            // Find instance indices for this component type
             var instances = pinMapping.Keys
                 .Select(k => k.Split('.')[0])
                 .Where(k => k.StartsWith(comp.Type))
@@ -151,7 +296,6 @@ void loop() {{
                     pinValues["var_name"] = $"{comp.Type}_{idx}";
 
                     var rendered = parsedTmpl.Render(pinValues);
-                    // Indent each line
                     lines.AddRange(rendered.Split('\n').Select(l => $"  {l}"));
                 }
             }
@@ -160,54 +304,17 @@ void loop() {{
         return string.Join("\n", lines);
     }
 
-    private string GenerateLoop(Dictionary<string, string> pinMapping, List<Component> components)
-    {
-        var lines = new List<string>();
-        var processed = new HashSet<string>();
 
-        foreach (var comp in components)
-        {
-            var instances = pinMapping.Keys
-                .Select(k => k.Split('.')[0])
-                .Where(k => k.StartsWith(comp.Type))
-                .Distinct()
-                .ToList();
-
-            foreach (var instance in instances)
-            {
-                if (processed.Contains(instance)) continue;
-                processed.Add(instance);
-
-                var idx = instance.Replace(comp.Type + "_", "");
-
-                foreach (var tmpl in comp.CodeTemplates.Where(t => t.TemplateType == "loop"))
-                {
-                    var parsedTmpl = Template.Parse(tmpl.TemplateContent);
-                    var pinValues = BuildTemplateContext(instance, pinMapping);
-                    pinValues["instance_id"] = idx;
-                    pinValues["display_name"] = comp.DisplayName ?? comp.Type;
-                    pinValues["var_name"] = $"{comp.Type}_{idx}";
-
-                    var rendered = parsedTmpl.Render(pinValues);
-                    lines.AddRange(rendered.Split('\n').Select(l => $"  {l}"));
-                }
-            }
-        }
-
-        return string.Join("\n", lines);
-    }
-
-    /// <summary>
-    /// Builds a template context dictionary like { "pin_out": "3", "pin_trig": "4" }
-    /// from the mapping "ir_sensor_0.OUT" → "D3" (converts to pin_out → 3)
-    /// </summary>
-    private Dictionary<string, object> BuildTemplateContext(string instanceLabel, Dictionary<string, string> pinMapping)
+    private Dictionary<string, object> BuildTemplateContext(
+        string instanceLabel,
+        Dictionary<string, string> pinMapping)
     {
         var context = new Dictionary<string, object>();
 
         foreach (var (key, value) in pinMapping)
         {
-            if (!key.StartsWith(instanceLabel + ".")) continue;
+            if (!key.StartsWith(instanceLabel + "."))
+                continue;
 
             string pinName = key.Split('.')[1].ToLowerInvariant();
             string pinValue = value.StartsWith("D") ? value[1..] : value;
