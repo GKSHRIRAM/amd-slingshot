@@ -108,7 +108,7 @@ public class CircuitGenerationService : ICircuitGenerationService
 
             // ─── PHASE 5: Generate Code ─────────────────────────
             _logger.LogInformation("Phase 4: Generating Arduino code");
-            var code = await _codeGenerator.GenerateCodeAsync(solverResult.PinMapping, components);
+            var code = await _codeGenerator.GenerateCodeAsync(solverResult.PinMapping, components, intent.Logic_Type);
 
             _logger.LogInformation("Pipeline completed successfully");
 
