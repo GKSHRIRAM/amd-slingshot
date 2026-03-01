@@ -105,20 +105,15 @@ public class CircuitGenerationService : ICircuitGenerationService
 
                 var allComponents = initialComponents.Concat(injectedComponents).ToList();
 
-                // ─── CRITICAL VOLTAGE CHECK ────────────────────────────
-                // Before solver: Verify LLC is in the component list if voltage issues exist
+                // ─── VOLTAGE COMPATIBILITY CHECK ─────────────────────────
+                // Detect 3.3V components on 5V board
+                // NOTE: LLC will be injected POST-SOLVE in the voltage interceptor (line ~155)
+                // so we just log here, don't fail
                 bool hasVoltageIssue = allComponents.Any(c => c.LogicVoltage == 3.3f) && (float)board.LogicLevelV > 3.3f;
-                bool hasLLCInjected = allComponents.Any(c => c.Type == "logic_level_converter_4ch");
                 
-                if (hasVoltageIssue && !hasLLCInjected)
+                if (hasVoltageIssue)
                 {
-                    _logger.LogError("🛑 VOLTAGE CONFLICT: 3.3V components detected on {BoardVoltage}V board, but Logic Level Converter not injected!", board.LogicLevelV);
-                    return GenerateCircuitResponse.Fail($"Voltage incompatibility on {boardIntent.Board_Id}: 3.3V components require a logic level converter. DependencyService failed to inject.");
-                }
-
-                if (hasVoltageIssue && hasLLCInjected)
-                {
-                    _logger.LogInformation("✅ VOLTAGE SAFETY: Logic Level Converter injected for 3.3V silicon on {BoardVoltage}V board", board.LogicLevelV);
+                    _logger.LogWarning("⚡ VOLTAGE MISMATCH DETECTED: 3.3V components on {BoardVoltage}V board. Logic Level Converter will be auto-injected post-solve.", board.LogicLevelV);
                 }
 
                 // 4. I2C Conflicts check (Intra-board only)
