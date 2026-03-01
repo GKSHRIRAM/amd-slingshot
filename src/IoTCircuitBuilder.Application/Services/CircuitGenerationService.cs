@@ -264,6 +264,10 @@ public class CircuitGenerationService : ICircuitGenerationService
         bool isTransmitterOnly = role.Contains("transmit", StringComparison.OrdinalIgnoreCase) && !role.Contains("receive", StringComparison.OrdinalIgnoreCase);
         bool isReceiverOnly = role.Contains("receive", StringComparison.OrdinalIgnoreCase) && !role.Contains("transmit", StringComparison.OrdinalIgnoreCase);
 
+        // ⚠️SENSOR LIST: Components that MEASURE or SENSE (should only be on TX boards)
+        var sensorTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+        { "hc_sr04_ultrasonic", "ir_sensor", "dht11", "bme280", "ldr_sensor", "mpu6050_gyro", "tcs3200_color_sensor", "hc_sr501_pir" };
+
         foreach (var comp in rawBom)
         {
             // Matrix Rules
@@ -282,6 +286,13 @@ public class CircuitGenerationService : ICircuitGenerationService
             if (isReceiverOnly && comp.Type.Equals("rf_transmitter", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("📻 SIMPLEX RADIO RULE: Removed rf_transmitter from dedicated Receiver board");
+                continue;
+            }
+
+            // 🎯 SENSOR PRUNING RULE: Receiver boards should DISPLAY data, not MEASURE it
+            if (isReceiverOnly && sensorTypes.Contains(comp.Type))
+            {
+                _logger.LogWarning("🛡️ SENSOR PRUNING: Removed {SensorType} from receiver-only board. Receivers display data, they don't measure it.", comp.Type);
                 continue;
             }
 

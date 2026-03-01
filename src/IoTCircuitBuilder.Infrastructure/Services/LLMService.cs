@@ -39,7 +39,10 @@ If the user mentions controlling the device via a smartphone, mobile app, laptop
 1. topologies: 'single_board', 'transmitter_receiver', 'mesh_network'
 2. communication_hardware: Must be one of: 'bluetooth_hc05', 'rf_transmitter_receiver', 'nrf24l01_spi_module', 'esp8266_wifi'. If single_board, leave null.
 3. shared_payload: If networked, write a C++ struct definition representing the data they will send to each other.
-4. boards: Array of boards. Give each a clear role. CRITICAL: The downstream BOM Agent cannot read the user's prompt! You MUST EXPLICITLY LIST every sensor and actuator intended for that board in the `role` string (e.g. 'Read DHT11 and transmit via RF' for TX board, 'Receive RF data and display on OLED' for RX board). Failure to list transmission/reception direction means the wrong component will be selected!
+4. boards: Array of boards. Give each a clear role. 
+   CRITICAL TRANSMITTER BOARDS: List sensor names explicitly  (e.g., 'Read DHT11' or 'Measure distance with HC-SR04 and transmit via RF')
+   CRITICAL RECEIVER BOARDS: NEVER mention sensor names in role! Only say what display/storage/output they have (e.g., 'Receive RF data and display on OLED screen'). DO NOT say 'Receive temperature' - just say 'Receive data and display on OLED'.
+   CRITICAL: The downstream BOM Agent will parse role descriptions to select components. If you put 'temperature' in a receiver role, the BOM Agent will incorrectly add a temperature SENSOR to the receiver board. Always separate TX (with sensors) from RX (with displays only).
 5. hardware_class: For EVERY board, you MUST classify its physical movement type. Choose EXACTLY ONE from:
    - 'STATIONARY_STATIC': No movement (e.g. Weather station, Air quality monitor)
    - 'STATIONARY_KINEMATIC': Bolted down, but moves (e.g. Solar tracker, Smart dustbin)
@@ -90,8 +93,9 @@ PASSIVES: resistor, capacitor_ceramic, diode
 POWER: lipo_battery_3s
 
 8. MANDATORY RULES:
-   - You MUST include every sensor, actuator, and driver mentioned in the 'ROLE' description. If the role says 'motor', you MUST output both 'dc_motor' and 'l298n_motor_driver'.
-   - GHOST COMPONENT RULE: If you omit a component mentioned in the ROLE, the circuit will fail.
+   - You MUST include every EXPLICITLY NAMED sensor, actuator, and driver in the 'ROLE' description. Example: If ROLE says 'Read DHT11', add dht11. If ROLE says 'Measure motor', add both 'dc_motor' and 'l298n_motor_driver'.
+   - CRITICAL INFERENCE RULE: Do NOT infer sensors from concepts. If ROLE says 'display temperature' with NO sensor name → do NOT add dht11! Only add sensors if they are NAMED. (e.g. 'Read DHT11' or 'Measure with HC-SR04').
+   - GHOST COMPONENT RULE: If you omit a NAMED component in the ROLE, the circuit will fail.
    - You will be provided with 'Mandatory Communication Hardware'. You MUST include it in your output JSON array if it is not null.
    - CRITICAL SIMPLEX RADIO RULE: If the ROLE says only 'transmit' or only 'receive' (but not both), do NOT include the opposite direction component. Example: If ROLE is 'send RF data', include ONLY 'rf_transmitter', NOT 'rf_receiver'.
    - DO NOT include: battery, breadboard, wires, arduino. (The C# engine adds these automatically).
