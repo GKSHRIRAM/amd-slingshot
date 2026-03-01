@@ -39,7 +39,7 @@ If the user mentions controlling the device via a smartphone, mobile app, laptop
 1. topologies: 'single_board', 'transmitter_receiver', 'mesh_network'
 2. communication_hardware: Must be one of: 'bluetooth_hc05', 'rf_transmitter_receiver', 'nrf24l01_spi_module', 'esp8266_wifi'. If single_board, leave null.
 3. shared_payload: If networked, write a C++ struct definition representing the data they will send to each other.
-4. boards: Array of boards. Give each a clear role. CRITICAL: The downstream BOM Agent cannot read the user's prompt! You MUST EXPLICITLY LIST every sensor and actuator intended for that board in the `role` string (e.g. 'Read DHT11 and control SG90_servo and DC_motor' instead of 'Conveyor belt control'). Failure to list a component in the `role` means it will be MISSING from the final circuit.
+4. boards: Array of boards. Give each a clear role. CRITICAL: The downstream BOM Agent cannot read the user's prompt! You MUST EXPLICITLY LIST every sensor and actuator intended for that board in the `role` string (e.g. 'Read DHT11 and transmit via RF' for TX board, 'Receive RF data and display on OLED' for RX board). Failure to list transmission/reception direction means the wrong component will be selected!
 5. hardware_class: For EVERY board, you MUST classify its physical movement type. Choose EXACTLY ONE from:
    - 'STATIONARY_STATIC': No movement (e.g. Weather station, Air quality monitor)
    - 'STATIONARY_KINEMATIC': Bolted down, but moves (e.g. Solar tracker, Smart dustbin)
@@ -55,14 +55,14 @@ OUTPUT STRICT JSON ONLY:
   ""boards"": [
     {
       ""board_id"": ""board_0"",
-      ""role"": ""Read temperature/humidity from DHT11 and send via RF"",
+      ""role"": ""Read temperature and humidity from DHT11 and transmit via RF"",
       ""hardware_class"": ""STATIONARY_STATIC"",
       ""board"": ""arduino_uno"",
       ""logic_type"": ""manual_control""
     },
     {
       ""board_id"": ""board_1"",
-      ""role"": ""Receive RF data and display temperature on OLED screen"",
+      ""role"": ""Receive RF data and display on OLED screen"",
       ""hardware_class"": ""STATIONARY_STATIC"",
       ""board"": ""arduino_uno"",
       ""logic_type"": ""manual_control""
@@ -93,6 +93,7 @@ POWER: lipo_battery_3s
    - You MUST include every sensor, actuator, and driver mentioned in the 'ROLE' description. If the role says 'motor', you MUST output both 'dc_motor' and 'l298n_motor_driver'.
    - GHOST COMPONENT RULE: If you omit a component mentioned in the ROLE, the circuit will fail.
    - You will be provided with 'Mandatory Communication Hardware'. You MUST include it in your output JSON array if it is not null.
+   - CRITICAL SIMPLEX RADIO RULE: If the ROLE says only 'transmit' or only 'receive' (but not both), do NOT include the opposite direction component. Example: If ROLE is 'send RF data', include ONLY 'rf_transmitter', NOT 'rf_receiver'.
    - DO NOT include: battery, breadboard, wires, arduino. (The C# engine adds these automatically).
    - ABSOLUTE PHYSICS RULE: You are physically forbidden from suggesting components that violate your HARDWARE CLASS.
 

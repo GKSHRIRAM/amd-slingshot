@@ -60,9 +60,29 @@ public class CircuitGenerationService : ICircuitGenerationService
             {
                 _logger.LogInformation("Processing array entry. Board ID: {BoardId}, Role: {Role}", boardIntent.Board_Id, boardIntent.Role);
                 
-                // 1. BOM Agent
+                // 1. BOM Agent - Route only relevant communication hardware based on board role
+                var roleUpperCase = boardIntent.Role.ToUpperInvariant();
+                var isTransmitterOnly = roleUpperCase.Contains("TRANSMIT") && !roleUpperCase.Contains("RECEIVE");
+                var isReceiverOnly = roleUpperCase.Contains("RECEIVE") && !roleUpperCase.Contains("TRANSMIT");
+                
+                string? routedCommunicationHardware = null;
+                if (isTransmitterOnly && intent.Communication_Hardware == "rf_transmitter_receiver")
+                {
+                    routedCommunicationHardware = "rf_transmitter";
+                    _logger.LogInformation("🔀 ROUTING DECISION: TX-only board gets only rf_transmitter (not receiver)");
+                }
+                else if (isReceiverOnly && intent.Communication_Hardware == "rf_transmitter_receiver")
+                {
+                    routedCommunicationHardware = "rf_receiver";
+                    _logger.LogInformation("🔀 ROUTING DECISION: RX-only board gets only rf_receiver (not transmitter)");
+                }
+                else
+                {
+                    routedCommunicationHardware = intent.Communication_Hardware;
+                }
+                
                 var catalog = await _componentRepository.GetAllComponentTypesAsync();
-                var bomComponents = await _llmService.ParseBOMAsync(boardIntent.Role, boardIntent.Hardware_Class, intent.Communication_Hardware, catalog);
+                var bomComponents = await _llmService.ParseBOMAsync(boardIntent.Role, boardIntent.Hardware_Class, routedCommunicationHardware, catalog);
                 
                 // 1.5. Deterministic Pruning Matrix
                 var prunedComponents = PruneHallucinations(boardIntent.Hardware_Class, boardIntent.Role, bomComponents);

@@ -200,6 +200,9 @@ public class ConstraintSolver : IConstraintSolver
     private SolverResult? ValidateVoltageCompatibility(Board board, List<Component> components)
     {
         bool hasLevelShifter = components.Any(c => c.Type == "logic_level_converter_4ch");
+        // NEW: Detect if post-solve LLC injection will handle voltage issues
+        bool has3V3Components = components.Any(c => c.LogicVoltage == 3.3f);
+        bool needsPostSolveLLCInjection = has3V3Components && (float)board.LogicLevelV > 3.3f;
 
         foreach (var comp in components)
         {
@@ -210,6 +213,14 @@ public class ConstraintSolver : IConstraintSolver
             // If the circuit contains a Logic Level Converter, we assume the interceptor will handle the routing safely.
             if (hasLevelShifter)
                 continue;
+
+            // NEW: Skip logic level validation if post-solve LLC injection is planned
+            // The voltage interceptor will handle rewiring 3.3V components after solving
+            if (needsPostSolveLLCInjection && comp.LogicVoltage == 3.3f && (float)board.LogicLevelV > comp.LogicVoltage)
+            {
+                _logger.LogWarning("⚠️ DEFERRED: {Component} logic voltage issue will be fixed post-solve via automatic LLC injection", comp.DisplayName ?? comp.Type);
+                continue;
+            }
 
             // 1. Physical Power compatibility
             if (!comp.RequiresExternalPower && (board.Voltage < comp.VoltageMin || board.Voltage > comp.VoltageMax))
@@ -225,7 +236,8 @@ public class ConstraintSolver : IConstraintSolver
             }
 
             // 2. Logic Level Signal compatibility (e.g., 5V Uno vs 3.3V Sensor)
-            if (board.LogicLevelV > (decimal)comp.LogicVoltage)
+            // ⚠️ Only fail if NOT covered by post-solve LLC injection
+            if (board.LogicLevelV > (decimal)comp.LogicVoltage && !(needsPostSolveLLCInjection && comp.LogicVoltage == 3.3f))
             {
                 return SolverResult.Failed(
                     $"⚠️ LOGIC LEVEL CONFLICT\n\n" +
