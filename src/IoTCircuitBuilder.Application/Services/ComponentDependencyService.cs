@@ -127,6 +127,29 @@ public class ComponentDependencyService : IComponentDependencyService
             }
         }
 
+        // --- STEP 2.5: PROTOCOL PIN FIXING ---
+        // SPI addresses (RC522, etc) must use fixed Arduino pins: D11=MOSI, D12=MISO, D13=SCK
+        // These are hardwired and cannot be assigned dynamically!
+        bool hasSpiComponent = components.Any(c => c.InterfaceProtocol == "spi");
+        if (hasSpiComponent)
+        {
+            // Find RC522 instance and pre-assign its SPI pins
+            var rc522Components = components.Where(c => c.Type == "rc522_rfid").ToList();
+            for (int i = 0; i < rc522Components.Count; i++)
+            {
+                string instanceName = $"rc522_rfid_{i}";
+                
+                // Hardwired SPI pins on Arduino Uno
+                preAssignments[$"{instanceName}.MOSI"] = "D11";  // SPI MOSI
+                preAssignments[$"{instanceName}.MISO"] = "D12";  // SPI MISO  
+                preAssignments[$"{instanceName}.SCK"] = "D13";   // SPI SCK
+                
+                // SDA (Chip Select) and RST can use any free digital pin
+                // We'll let the solver assign these, but they should get D2-D9 or A0-A5
+                advice.Add($"📍 PINNED: RC522 #{i} SPI (D11/D12/D13) locked. SDA/RST need free digital pins.");
+            }
+        }
+
         // --- STEP 3: PASSIVE COMPONENTS (Resistors, Diodes) ---
         int ledCount = components.Count(c => c.Type == "led_red");
         int currentResistors = components.Count(c => c.Type == "resistor");
@@ -175,29 +198,15 @@ public class ComponentDependencyService : IComponentDependencyService
 
         // --- STEP 5: LOGIC LEVEL SHIFTING ---
         // Arduino Uno R3 is 5.0V logic. ESP8266/RFID are 3.3V.
+        // ⚠️ CRITICAL: Do NOT add LLC to injectedTypes here!
+        // It gets injected AFTER solving in CircuitGenerationService.cs (line 125)
+        // Adding it here would waste GPIO pins unnecessarily.
         bool needsLevelShifter = components.Any(c => c.LogicVoltage == 3.3f) && (float)board.LogicLevelV > 3.3f;
 
         if (needsLevelShifter)
         {
-            injectedTypes.Add("logic_level_converter_4ch");
-            string llcId = GetNextId("logic_level_converter_4ch");
-            advice.Add("⚡ LOGIC LEVEL CONVERTER AUTO-INJECTED: Required to safely bridge 3.3V components (WiFi/RFID) with the 5V Arduino.");
-
-            // Power the shifter
-            preAssignments[$"{llcId}.HV"] = "5V";
-            preAssignments[$"{llcId}.LV"] = "3.3V";
-            preAssignments[$"{llcId}.GND_HV"] = "GND";
-            preAssignments[$"{llcId}.GND_LV"] = "GND";
-
-            // If we have a breadboard, route them to rails instead
-            if (needsBreadboard)
-            {
-                string bbId = "breadboard_half_0";
-                preAssignments[$"{llcId}.HV"] = $"{bbId}.RAIL_5V";
-                preAssignments[$"{llcId}.LV"] = $"{bbId}.RAIL_3V3";
-                preAssignments[$"{llcId}.GND_HV"] = $"{bbId}.RAIL_GND";
-                preAssignments[$"{llcId}.GND_LV"] = $"{bbId}.RAIL_GND";
-            }
+            // Flag it in advice so the UI knows, but don't add to injectedTypes
+            advice.Add("⚡ LOGIC LEVEL CONVERTER READY: Will auto-inject post-solve to bridge 3.3V components (WiFi/RFID) with 5V Arduino.");
         }
 
         return (injectedTypes, advice, preAssignments, needsBreadboard);
