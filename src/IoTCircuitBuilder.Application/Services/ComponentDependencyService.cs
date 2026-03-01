@@ -9,7 +9,7 @@ namespace IoTCircuitBuilder.Application.Services;
 
 public interface IComponentDependencyService
 {
-    (List<string> InjectedTypes, List<string> AdviceWarnings, Dictionary<string, string> PreAssignments, bool NeedsBreadboard) AnalyzeAndInject(IoTCircuitBuilder.Domain.Entities.Board board, List<IoTCircuitBuilder.Domain.Entities.Component> components, string? prompt = null);
+    (List<string> InjectedTypes, List<string> AdviceWarnings, Dictionary<string, string> PreAssignments, bool NeedsBreadboard) AnalyzeAndInject(IoTCircuitBuilder.Domain.Entities.Board board, List<IoTCircuitBuilder.Domain.Entities.Component> components, string hardwareClass, string? prompt = null);
 }
 
 public class ComponentDependencyService : IComponentDependencyService
@@ -21,7 +21,7 @@ public class ComponentDependencyService : IComponentDependencyService
         _logger = logger;
     }
 
-    public (List<string> InjectedTypes, List<string> AdviceWarnings, Dictionary<string, string> PreAssignments, bool NeedsBreadboard) AnalyzeAndInject(IoTCircuitBuilder.Domain.Entities.Board board, List<IoTCircuitBuilder.Domain.Entities.Component> components, string? prompt = null)
+    public (List<string> InjectedTypes, List<string> AdviceWarnings, Dictionary<string, string> PreAssignments, bool NeedsBreadboard) AnalyzeAndInject(IoTCircuitBuilder.Domain.Entities.Board board, List<IoTCircuitBuilder.Domain.Entities.Component> components, string hardwareClass, string? prompt = null)
     {
         var advice = new List<string>();
         var injectedTypes = new List<string>();
@@ -47,7 +47,8 @@ public class ComponentDependencyService : IComponentDependencyService
         bool isRobot = !string.IsNullOrEmpty(prompt) && 
                        (prompt.Contains("robot", StringComparison.OrdinalIgnoreCase) || 
                         prompt.Contains("car", StringComparison.OrdinalIgnoreCase) || 
-                        prompt.Contains("chassis", StringComparison.OrdinalIgnoreCase));
+                        prompt.Contains("chassis", StringComparison.OrdinalIgnoreCase)) &&
+                       hardwareClass.Equals("MOBILE_ROBOTICS", StringComparison.OrdinalIgnoreCase);
 
         int dcMotorCount = components.Count(c => c.Type == "dc_motor");
         int driverCount = components.Count(c => c.Type == "l298n_motor_driver");
@@ -76,13 +77,25 @@ public class ComponentDependencyService : IComponentDependencyService
 
         // --- STEP 2: GLOBAL POWER BUDGET (Battery Injection) ---
         int totalCurrentDraw = components.Where(c => !c.RequiresExternalPower).Sum(c => c.CurrentDrawMa);
-        bool needsBattery = totalCurrentDraw > board.MaxCurrentMa || dcMotorCount > 0 || driverCount > 0 || components.Any(c => c.Type.Contains("servo"));
+        bool needsBattery = totalCurrentDraw > board.MaxCurrentMa || dcMotorCount > 0 || driverCount > 0 || components.Any(c => c.Type.Contains("servo", StringComparison.OrdinalIgnoreCase));
 
         if (needsBattery)
         {
-            injectedTypes.Add("battery_9v");
-            string batId = GetNextId("battery_9v");
-            advice.Add("🔌 AUTO-INJECTED 9V BATTERY: Required for high-power motors/drivers.");
+            // ─── THE SERVO SAVER (Strictly 6V Max) ───
+            bool hasServo = components.Any(c => c.Type.Contains("servo", StringComparison.OrdinalIgnoreCase));
+            string batteryType = hasServo ? "battery_4xaa" : "battery_9v";
+            
+            injectedTypes.Add(batteryType);
+            string batId = GetNextId(batteryType);
+            
+            if (hasServo)
+            {
+                advice.Add("🔌 AUTO-INJECTED 4xAA BATTERY (6V): Required for safe servo operation without brownout or overvoltage.");
+            }
+            else
+            {
+                advice.Add("🔌 AUTO-INJECTED 9V BATTERY: Required for high-power motors/drivers.");
+            }
             
             // Common Ground Rule
             preAssignments[$"{batId}.GND"] = "GND";
@@ -156,7 +169,35 @@ public class ComponentDependencyService : IComponentDependencyService
         if (count5V > 1 || countGND > 3 || (components.Count + injectedTypes.Count) > 5)
         {
             needsBreadboard = true;
-            advice.Add("🥪 BREADBOARD INJECTED: Too many power/signal connections for the Arduino pins alone.");
+            injectedTypes.Add("breadboard_half");
+            advice.Add("🥪 BREADBOARD AUTO-INJECTED: Pin deficit detected (5V/GND). Moving power distribution to breadboard rails.");
+        }
+
+        // --- STEP 5: LOGIC LEVEL SHIFTING ---
+        // Arduino Uno R3 is 5.0V logic. ESP8266/RFID are 3.3V.
+        bool needsLevelShifter = components.Any(c => c.LogicVoltage == 3.3f) && (float)board.LogicLevelV > 3.3f;
+
+        if (needsLevelShifter)
+        {
+            injectedTypes.Add("logic_level_converter_4ch");
+            string llcId = GetNextId("logic_level_converter_4ch");
+            advice.Add("⚡ LOGIC LEVEL CONVERTER AUTO-INJECTED: Required to safely bridge 3.3V components (WiFi/RFID) with the 5V Arduino.");
+
+            // Power the shifter
+            preAssignments[$"{llcId}.HV"] = "5V";
+            preAssignments[$"{llcId}.LV"] = "3.3V";
+            preAssignments[$"{llcId}.GND_HV"] = "GND";
+            preAssignments[$"{llcId}.GND_LV"] = "GND";
+
+            // If we have a breadboard, route them to rails instead
+            if (needsBreadboard)
+            {
+                string bbId = "breadboard_half_0";
+                preAssignments[$"{llcId}.HV"] = $"{bbId}.RAIL_5V";
+                preAssignments[$"{llcId}.LV"] = $"{bbId}.RAIL_3V3";
+                preAssignments[$"{llcId}.GND_HV"] = $"{bbId}.RAIL_GND";
+                preAssignments[$"{llcId}.GND_LV"] = $"{bbId}.RAIL_GND";
+            }
         }
 
         return (injectedTypes, advice, preAssignments, needsBreadboard);

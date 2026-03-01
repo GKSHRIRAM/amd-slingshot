@@ -2,6 +2,7 @@ using IoTCircuitBuilder.Core.Interfaces;
 using IoTCircuitBuilder.Domain.Entities;
 using IoTCircuitBuilder.Domain.Enums;
 using IoTCircuitBuilder.Domain.ValueObjects;
+using IoTCircuitBuilder.Core.Hardware;
 using Microsoft.Extensions.Logging;
 
 namespace IoTCircuitBuilder.Core.Algorithms;
@@ -11,6 +12,7 @@ public class ConstraintSolver : IConstraintSolver
     private readonly ILogger<ConstraintSolver> _logger;
     private int _backtrackCount;
     private const int MAX_BACKTRACKS = 10000;  // Prevent infinite loops on complex circuits
+    private readonly HardwareTimerRegistry _timerRegistry = new();
 
     // ═══════════════════════════════════════════════════════════════
     //  HARDWARE BLACKLISTS — These are physics, not suggestions
@@ -38,10 +40,16 @@ public class ConstraintSolver : IConstraintSolver
     {
         _backtrackCount = 0;
 
-        _logger.LogInformation("Starting constraint solver with {ComponentCount} components on {Board}", components.Count, board.Name);
+        // ─── THE SILICON FIREWALL ────────────────────────────────
+        // Sort components by strictness (RoutingPriority) before any routing occurs.
+        // I2C/SPI (0) -> Servos/Buzzers (1) -> Motors (2) -> Generic (3)
+        var sortedComponents = components.OrderBy(c => c.RoutingPriority).ToList();
+        
+        // Block timers that will be hijacked by libraries
+        _timerRegistry.AnalyzeBomForConflicts(sortedComponents);
 
         // ─── BUILD DYNAMIC BLACKLIST ─────────────────────────────
-        var blacklistedPins = BuildBlacklist(components);
+        var blacklistedPins = BuildBlacklist(sortedComponents);
         _logger.LogInformation("Blacklisted pins: {Pins}", string.Join(", ", blacklistedPins));
 
         // ─── PRE-VALIDATION ──────────────────────────────────────
@@ -51,11 +59,11 @@ public class ConstraintSolver : IConstraintSolver
         if (currentCheck != null) return Task.FromResult(currentCheck);
 
         // Check 2: Voltage Compatibility
-        var voltageCheck = ValidateVoltageCompatibility(board, components);
+        var voltageCheck = ValidateVoltageCompatibility(board, sortedComponents);
         if (voltageCheck != null) return Task.FromResult(voltageCheck);
 
         // Collect all pin requirements (Skipping those already pre-assigned by the Dependency Service)
-        var requirements = CollectRequirements(components, preAssignedPins);
+        var requirements = CollectRequirements(sortedComponents, preAssignedPins);
         _logger.LogInformation("Collected {RequirementCount} pin requirements to route to Arduino", requirements.Count);
 
         // Check 3: Pin Availability by Type (excluding blacklisted)
@@ -98,7 +106,7 @@ public class ConstraintSolver : IConstraintSolver
                 warnings.Add(powerCheck.Message!);
 
             // Check for servo brownout risk
-            var servoWarning = CheckServoBrownout(components);
+            var servoWarning = CheckServoBrownout(sortedComponents);
             if (servoWarning != null)
                 warnings.Add(servoWarning);
 
@@ -191,10 +199,16 @@ public class ConstraintSolver : IConstraintSolver
 
     private SolverResult? ValidateVoltageCompatibility(Board board, List<Component> components)
     {
+        bool hasLevelShifter = components.Any(c => c.Type == "logic_level_converter_4ch");
+
         foreach (var comp in components)
         {
             // Skip voltage validations for power supplies and passive components (resistors, diodes)
             if (comp.Category == "power" || comp.Category == "passive")
+                continue;
+
+            // If the circuit contains a Logic Level Converter, we assume the interceptor will handle the routing safely.
+            if (hasLevelShifter)
                 continue;
 
             // 1. Physical Power compatibility
@@ -211,12 +225,11 @@ public class ConstraintSolver : IConstraintSolver
             }
 
             // 2. Logic Level Signal compatibility (e.g., 5V Uno vs 3.3V Sensor)
-            // Even if powered correctly, a 5V signal on a 3.3V GPIO will fry most sensors.
-            if (board.LogicLevelV > comp.VoltageMax)
+            if (board.LogicLevelV > (decimal)comp.LogicVoltage)
             {
                 return SolverResult.Failed(
                     $"⚠️ LOGIC LEVEL CONFLICT\n\n" +
-                    $"{comp.DisplayName ?? comp.Type} has a maximum tolerated voltage of {comp.VoltageMax}V.\n" +
+                    $"{comp.DisplayName ?? comp.Type} has a maximum tolerated logic voltage of {comp.LogicVoltage}V.\n" +
                     $"The {board.DisplayName ?? board.Name} uses {board.LogicLevelV}V logic signals.\n" +
                     $"Connecting {board.LogicLevelV}V signals directly to this component will likely damage it.\n\n" +
                     $"💡 SOLUTIONS:\n" +
@@ -240,8 +253,14 @@ public class ConstraintSolver : IConstraintSolver
 
         foreach (var group in reqGroups)
         {
-            int needed = group.Count();
-            int available = CountAvailablePins(board, group.Key, blacklist);
+            bool isSharedBus = group.Key == PinCapabilityType.I2cSda ||
+                               group.Key == PinCapabilityType.I2cScl ||
+                               group.Key == PinCapabilityType.SpiMosi ||
+                               group.Key == PinCapabilityType.SpiMiso ||
+                               group.Key == PinCapabilityType.SpiSck;
+
+            int needed = isSharedBus ? 1 : group.Count();
+            int available = CountAvailablePins(board, group.Key, isSharedBus ? new HashSet<string>() : blacklist);
 
             _logger.LogInformation("{Type} pins: need {Needed}, have {Available} (after blacklist)", group.Key, needed, available);
 
@@ -249,7 +268,7 @@ public class ConstraintSolver : IConstraintSolver
             {
                 return SolverResult.Failed(
                     $"⚠️ INSUFFICIENT {group.Key.ToString().ToUpper()} PINS\n\n" +
-                    $"Your project needs {needed} {group.Key}-capable pins.\n" +
+                    $"Your project needs {group.Count()} {group.Key}-capable pins.\n" +
                     $"The {board.DisplayName ?? board.Name} only has {available} available (after reserving Serial/protocol pins).\n\n" +
                     $"💡 SOLUTIONS:\n" +
                     $"1. Upgrade to Arduino Mega (more pins)\n" +
@@ -355,6 +374,33 @@ public class ConstraintSolver : IConstraintSolver
             req.RequiredCapability == PinCapabilityType.I2cSda ||
             req.RequiredCapability == PinCapabilityType.I2cScl)
         {
+            string sourcePinIdentifier = string.Empty;
+
+            // ─── TOPOLOGICAL POWER REDIRECTION ───
+            // If it's 5V/GND/3.3V and a breadboard is present, route to the BREADBOARD rails instead of Arduino.
+            var breadboard = board.Pins.Any(p => p.PinIdentifier.Contains("RAIL_")) ? null : // Optimization: If we're ALREADY routing for the breadboard itself, don't recurse
+                requirements.Select(r => r.ComponentLabel.Split('_').First()).Any(t => t == "breadboard") ? 
+                requirements.First(r => r.ComponentLabel.StartsWith("breadboard_")).ComponentLabel : null;
+
+            if (breadboard != null && !req.ComponentLabel.StartsWith("breadboard_"))
+            {
+                // Route requirement to breadboard rail
+                string railName = req.RequiredCapability switch
+                {
+                    PinCapabilityType.Power5V => "RAIL_5V",
+                    PinCapabilityType.Power3V3 => "RAIL_3V3",
+                    PinCapabilityType.Ground => "RAIL_GND",
+                    _ => string.Empty
+                };
+
+                if (!string.IsNullOrEmpty(railName))
+                {
+                    assignment[$"{req.ComponentLabel}.{req.PinName}"] = $"{breadboard}.{railName}";
+                    return Backtrack(board, requirements, index + 1, assignment, usedPins, blacklistedPins);
+                }
+            }
+
+            // Normal shared bus/power routing (directly to Arduino or between direct pins)
             var sharedPin = board.Pins.FirstOrDefault(p =>
                 p.Capabilities.Any(c => c.CapabilityType == req.RequiredCapability));
 
@@ -374,6 +420,12 @@ public class ConstraintSolver : IConstraintSolver
                         !blacklistedPins.Contains(p.PinIdentifier) &&
                         p.Capabilities.Any(c => c.CapabilityType == req.RequiredCapability))
             .ToList();
+
+        // PWM SILICON CHECK: If this is a PWM requirement, ensure the pin's timer isn't hijacked
+        if (req.RequiredCapability == PinCapabilityType.Pwm)
+        {
+            candidatePins = candidatePins.Where(p => _timerRegistry.IsPinSafeForPwm(p.PinIdentifier)).ToList();
+        }
 
         foreach (var pin in candidatePins)
         {
@@ -416,6 +468,12 @@ public class ConstraintSolver : IConstraintSolver
                 // Rule 4: If this pin was explicitly assigned topologically by the Dependency Service, skip Uno routing.
                 if (preAssignedPins != null && preAssignedPins.ContainsKey(pinKey))
                     continue;
+
+                // THE FIREWALL: Skip hardware-only power/motor lines
+                if (req.RequiredCapability == PinCapabilityType.HardwareOnly) 
+                {
+                    continue; 
+                }
 
                 entries.Add(new PinRequirementEntry
                 {

@@ -15,5 +15,6 @@ public enum PinCapabilityType
     Power5V,
     Power3V3,
     PowerVin,
-    Ground
+    Ground,
+    HardwareOnly
 }

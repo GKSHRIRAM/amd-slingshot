@@ -170,7 +170,7 @@ public class PinMappingValidator
 
     private static bool IsSharedPin(string pinIdentifier)
     {
-        return pinIdentifier is "5V" or "3V3" or "GND" or "A4" or "A5";
+        return pinIdentifier is "5V" or "3V3" or "GND" or "A4" or "A5" || pinIdentifier.Contains("RAIL_");
     }
 }
 

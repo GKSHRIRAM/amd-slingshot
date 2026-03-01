@@ -112,7 +112,7 @@ if (typeof window !== 'undefined') {
     // ----------------------------------------------------------------------
     class CustomRFTransmitterElement extends HTMLElement {
         pinInfo = [
-            { name: "ATAD", x: 20, y: 10 },
+            { name: "DATA", x: 20, y: 10 },
             { name: "VCC", x: 40, y: 10 },
             { name: "GND", x: 60, y: 10 }
         ];
@@ -170,7 +170,7 @@ if (typeof window !== 'undefined') {
                     <div class="pin-hole" style="left: 40px;"></div>
                     <div class="pin-hole" style="left: 60px;"></div>
                     
-                    <div class="pin-label" style="left: 20px;">ATAD</div>
+                    <div class="pin-label" style="left: 20px;">DATA</div>
                     <div class="pin-label" style="left: 40px;">VCC</div>
                     <div class="pin-label" style="left: 60px;">GND</div>
                     
@@ -188,7 +188,7 @@ if (typeof window !== 'undefined') {
     class CustomRFReceiverElement extends HTMLElement {
         pinInfo = [
             { name: "VCC", x: 15, y: 10 },
-            { name: "DATA1", x: 35, y: 10 },
+            { name: "DATA", x: 35, y: 10 },
             { name: "DATA2", x: 55, y: 10 },
             { name: "GND", x: 75, y: 10 }
         ];

@@ -45,7 +45,7 @@ const WOKWI_REGISTRY: Record<string, string> = {
     buzzer: "wokwi-buzzer",
     oled_128x64: "wokwi-ssd1306",
     ssd1306: "wokwi-ssd1306",
-    dht11: "wokwi-dht11",
+    dht11: "wokwi-dht22",
     ldr_sensor: "wokwi-photoresistor-sensor",
     photoresistor: "wokwi-photoresistor-sensor",
     photosensor: "wokwi-photoresistor-sensor",
@@ -54,7 +54,8 @@ const WOKWI_REGISTRY: Record<string, string> = {
     hc_05_bluetooth: "custom-hc-05",
     bluetooth_hc05: "custom-hc-05",
     rf_transmitter: "custom-rf-transmitter",
-    rf_receiver: "custom-rf-receiver"
+    rf_receiver: "custom-rf-receiver",
+    mpu6050_gyro: "wokwi-mpu6050"
 };
 
 export default function WokwiCircuit({ pinMapping, needsBreadboard }: WokwiCircuitProps) {
@@ -152,6 +153,7 @@ export default function WokwiCircuit({ pinMapping, needsBreadboard }: WokwiCircu
                 if (type === "l298n_motor_driver") cPin = pinName;
                 if (type === "battery_9v") cPin = pinName;
                 if (type.startsWith("capacitor")) cPin = (pinName === "PIN1" || pinName === "ANODE") ? "1" : "2";
+                if (type === "dht11") cPin = pinName === "DATA" ? "SDA" : pinName;
 
                 // Keep original custom component names
                 if (wokwiType.startsWith("custom-")) cPin = pinName;

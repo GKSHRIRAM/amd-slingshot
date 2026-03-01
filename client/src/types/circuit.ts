@@ -3,14 +3,21 @@ export interface GenerateCircuitRequest {
     boardOverride?: string;
 }
 
+export interface CircuitBoardResult {
+    boardId: string;
+    role: string;
+    pinMapping: Record<string, string>;
+    generatedCode?: string;
+    componentsUsed: string[];
+    needsBreadboard: boolean;
+    warnings: string[];
+}
+
 export interface GenerateCircuitResponse {
     success: boolean;
-    pinMapping?: Record<string, string>;
-    generatedCode?: string;
-    componentsUsed?: string[];
     error?: string;
-    needsBreadboard?: boolean;
-    warnings?: string[];
+    globalWarnings?: string[];
+    boards?: CircuitBoardResult[];
 }
 
 export interface PinCoordinate {

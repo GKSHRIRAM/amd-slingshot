@@ -47,7 +47,7 @@ public class ComponentRepository : IComponentRepository
                 .Include(c => c.I2cAddresses)
                 .Include(c => c.CodeTemplates)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Type == type && c.IsActive);
+                .FirstOrDefaultAsync(c => c.Type.ToLower() == type.ToLower() && c.IsActive);
         });
     }
 
@@ -71,5 +71,13 @@ public class ComponentRepository : IComponentRepository
         }
 
         return addressList.Count != addressList.Distinct().Count();
+    }
+
+    public async Task<List<string>> GetAllComponentTypesAsync()
+    {
+        return await _db.Components
+            .Where(c => c.IsActive)
+            .Select(c => c.Type)
+            .ToListAsync();
     }
 }

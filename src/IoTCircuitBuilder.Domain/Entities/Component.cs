@@ -11,6 +11,8 @@ public class Component
     public int CurrentDrawMa { get; set; }
     public decimal VoltageMin { get; set; }
     public decimal VoltageMax { get; set; }
+    public float LogicVoltage { get; set; } = 5.0f;
+    public int RoutingPriority { get; set; } = 3; // 0=Bus, 1=TimerHijack, 2=HighActuator, 3=Generic
     public bool RequiresExternalPower { get; set; }
     public string? InterfaceProtocol { get; set; }                 // "digital", "i2c", "spi", etc.
     public bool RequiresLevelShifter { get; set; }
