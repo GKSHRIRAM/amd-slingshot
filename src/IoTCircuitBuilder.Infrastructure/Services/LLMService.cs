@@ -101,6 +101,22 @@ POWER: lipo_battery_3s
    - DO NOT include: battery, breadboard, wires, arduino. (The C# engine adds these automatically).
    - ABSOLUTE PHYSICS RULE: You are physically forbidden from suggesting components that violate your HARDWARE CLASS.
 
+9. COMPONENT INFERENCE PATTERNS (AUTO-ADD WHEN PATTERN MATCHED):
+   MOTOR CONTROL PATTERN:
+   - If ROLE contains ('motor' OR 'DC motor') AND ('control' OR 'drive' OR 'speed' OR 'PWM') → MUST add BOTH: dc_motor AND l298n_motor_driver
+   - If ROLE says 'speed control' or 'motor speed' → This automatically means dc_motor with l298n_motor_driver
+   
+   SERVO PATTERN:
+   - If ROLE contains ('servo' OR 'servo motor') → Add ONLY: sg90_servo
+   - Note: Servo alone is a display/output device
+   
+   JOYSTICK PATTERN:
+   - If ROLE contains ('joystick' OR 'analog stick') → Add ONLY: potentiometer
+   
+   RESISTOR PATTERN (auto-injected by engine, but mention if needed):
+   - If ROLE mentions 'LED' → resistor will be auto-added for current limiting
+   - If ROLE mentions 'potentiometer with pullup' → Add resistor
+
 OUTPUT STRICT JSON ONLY:
 {
   ""components"": [
